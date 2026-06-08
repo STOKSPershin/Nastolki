@@ -69,7 +69,8 @@ fun GameRoomScreen(
     onStartReadyCheck: () -> Unit,
     onToggleReady: (Boolean) -> Unit,
     onStartGame: () -> Unit,
-    onRoundResult: (Int) -> Unit
+    onRoundResult: (Int) -> Unit,
+    onUpdateGameState: (com.tbgames.app.feature.gameroom.domain.model.FakeArtistGameState, String?) -> Unit
 ) {
     var showLeaveDialog by remember { mutableStateOf(false) }
 
@@ -178,7 +179,8 @@ fun GameRoomScreen(
                                 players = state.players,
                                 currentUserId = state.currentUserId,
                                 isHost = state.isCurrentUserHost,
-                                onRoundResult = onRoundResult
+                                onRoundResult = onRoundResult,
+                                onUpdateState = onUpdateGameState
                             )
                         }
                     }

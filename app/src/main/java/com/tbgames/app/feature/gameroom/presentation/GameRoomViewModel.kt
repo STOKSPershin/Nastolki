@@ -380,6 +380,38 @@ class GameRoomViewModel @Inject constructor(
         }
     }
 
+    fun updateGameState(
+        newState: com.tbgames.app.feature.gameroom.domain.model.FakeArtistGameState,
+        status: String? = null
+    ) {
+        if (!_uiState.value.isCurrentUserHost) return
+        
+        viewModelScope.launch {
+            try {
+                val jsonState = kotlinx.serialization.json.Json.encodeToJsonElement(
+                    com.tbgames.app.feature.gameroom.domain.model.FakeArtistGameState.serializer(),
+                    newState
+                )
+                
+                @kotlinx.serialization.Serializable
+                data class GameStateUpdate(
+                    val status: String,
+                    @kotlinx.serialization.SerialName("game_state")
+                    val gameState: kotlinx.serialization.json.JsonElement
+                )
+                
+                supabase.postgrest["rooms"].update(
+                    GameStateUpdate(
+                        status = status ?: _uiState.value.roomStatus,
+                        gameState = jsonState
+                    )
+                ) { filter { eq("id", _uiState.value.roomId) } }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         pollingJob?.cancel()

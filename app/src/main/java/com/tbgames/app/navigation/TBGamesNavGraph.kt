@@ -181,7 +181,8 @@ fun TBGamesNavGraph(
                 onStartReadyCheck = gameRoomViewModel::startReadyCheck,
                 onToggleReady = gameRoomViewModel::toggleReady,
                 onStartGame = gameRoomViewModel::startGame,
-                onRoundResult = gameRoomViewModel::handleRoundResult
+                onRoundResult = gameRoomViewModel::handleRoundResult,
+                onUpdateGameState = gameRoomViewModel::updateGameState
             )
         }
     }

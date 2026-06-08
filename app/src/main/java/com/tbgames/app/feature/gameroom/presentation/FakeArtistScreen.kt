@@ -27,10 +27,12 @@ fun FakeArtistGameContent(
     players: List<RoomPlayerInfo>,
     currentUserId: String,
     isHost: Boolean,
-    onRoundResult: (Int) -> Unit
+    onRoundResult: (Int) -> Unit,
+    onUpdateState: (FakeArtistGameState, String?) -> Unit
 ) {
     var showWord by remember { mutableStateOf(false) }
     var showResultDialog by remember { mutableStateOf(false) }
+    var showFinishGameDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -148,14 +150,26 @@ fun FakeArtistGameContent(
         Spacer(modifier = Modifier.weight(1f))
 
         if (isHost) {
-            Button(
-                onClick = { showResultDialog = true },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text("Результат раунда", fontWeight = FontWeight.Bold)
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = { showResultDialog = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Результат раунда", fontWeight = FontWeight.Bold)
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                OutlinedButton(
+                    onClick = { showFinishGameDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Досрочно завершить игру", color = MaterialTheme.colorScheme.error)
+                }
             }
         }
     }
@@ -174,6 +188,29 @@ fun FakeArtistGameContent(
             },
             dismissButton = {
                 TextButton(onClick = { showResultDialog = false }) { Text("Отмена") }
+            }
+        )
+    }
+
+    if (showFinishGameDialog) {
+        AlertDialog(
+            onDismissRequest = { showFinishGameDialog = false },
+            title = { Text("Закончить игру?") },
+            text = { Text("Вы уверены, что хотите досрочно завершить игру? Победят игроки с наибольшим количеством очков на данный момент.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showFinishGameDialog = false
+                        onUpdateState(gameState, "game_over")
+                    }
+                ) {
+                    Text("Закончить", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFinishGameDialog = false }) {
+                    Text("Отмена")
+                }
             }
         )
     }
