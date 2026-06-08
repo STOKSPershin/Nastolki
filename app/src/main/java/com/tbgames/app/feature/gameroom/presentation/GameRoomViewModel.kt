@@ -124,9 +124,15 @@ class GameRoomViewModel @Inject constructor(
 
                     val isHostMissing = activePlayerInfos.isNotEmpty() && activePlayerInfos.none { it.isHost }
                     if (isHostMissing) {
-                        val newHostId = activePlayerInfos.minByOrNull { it.profile.id }?.profile?.id
-                        if (newHostId == userId) {
-                            claimHost(userId, roomId)
+                        if (room.status == "waiting") {
+                            try {
+                                supabase.postgrest["rooms"].delete { filter { eq("id", roomId) } }
+                            } catch (e: Exception) {}
+                        } else {
+                            val newHostId = activePlayerInfos.minByOrNull { it.profile.id }?.profile?.id
+                            if (newHostId == userId) {
+                                claimHost(userId, roomId)
+                            }
                         }
                     }
 

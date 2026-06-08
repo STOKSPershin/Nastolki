@@ -73,6 +73,15 @@ fun GameRoomScreen(
     onUpdateGameState: (com.tbgames.app.feature.gameroom.domain.model.FakeArtistGameState, String?) -> Unit
 ) {
     var showLeaveDialog by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    LaunchedEffect(state.isRoomClosed) {
+        if (state.isRoomClosed) {
+            android.widget.Toast.makeText(context, "Создатель комнаты покинул игру", android.widget.Toast.LENGTH_SHORT).show()
+            onLeaveRoom()
+            onBackClick()
+        }
+    }
 
     LaunchedEffect(state.roomStatus, state.players) {
         if (state.isCurrentUserHost && state.roomStatus == "ready_check" && state.players.isNotEmpty()) {
