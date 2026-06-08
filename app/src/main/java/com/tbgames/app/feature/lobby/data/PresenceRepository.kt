@@ -19,7 +19,11 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Serializable
-data class StatusUpdate(val status: String)
+data class StatusUpdate(
+    val status: String,
+    @kotlinx.serialization.SerialName("updated_at")
+    val updatedAt: String = java.time.Instant.now().toString()
+)
 
 @Singleton
 class PresenceRepository @Inject constructor(
@@ -56,8 +60,17 @@ class PresenceRepository @Inject constructor(
                         .select { filter { neq("status", "offline") } }
                         .decodeList<com.tbgames.app.core.domain.model.PlayerProfile>()
 
+                    val now = java.time.Instant.now()
                     val players = allProfiles
                         .filter { it.status != null && it.status != "offline" }
+                        .filter { profile ->
+                            try {
+                                val updatedAt = java.time.Instant.parse(profile.updatedAt)
+                                java.time.Duration.between(updatedAt, now).seconds < 15
+                            } catch (e: Exception) {
+                                false // If no updatedAt or invalid format, assume offline
+                            }
+                        }
                         .map { p ->
                             OnlinePlayer(
                                 id = p.id,

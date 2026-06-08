@@ -102,11 +102,34 @@ class GameRoomViewModel @Inject constructor(
                         } catch (e: Exception) { null }
                     }
 
-                    val isHost = roomPlayers.any { it.playerId == userId && it.isHost }
+                    // Heartbeat for current user
+                    try {
+                        supabase.postgrest["profiles"].update(
+                            mapOf("updated_at" to java.time.Instant.now().toString())
+                        ) { filter { eq("id", userId) } }
+                    } catch (e: Exception) {}
+
+                    val now = java.time.Instant.now()
+                    val activePlayerInfos = playerInfos.filter { info ->
+                        try {
+                            val updatedAt = java.time.Instant.parse(info.profile.updatedAt)
+                            java.time.Duration.between(updatedAt, now).seconds < 15
+                        } catch (e: Exception) { false }
+                    }
+
+                    val isHostMissing = activePlayerInfos.isNotEmpty() && activePlayerInfos.none { it.isHost }
+                    if (isHostMissing) {
+                        val newHostId = activePlayerInfos.minByOrNull { it.profile.id }?.profile?.id
+                        if (newHostId == userId) {
+                            claimHost(userId, roomId)
+                        }
+                    }
+
+                    val isHost = activePlayerInfos.any { it.profile.id == userId && it.isHost }
 
                     _uiState.update {
                         it.copy(
-                            players = playerInfos,
+                            players = activePlayerInfos,
                             isCurrentUserHost = isHost,
                             isLoading = false
                         )
@@ -235,6 +258,32 @@ class GameRoomViewModel @Inject constructor(
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = "Не удалось передать роль") }
             }
+        }
+    }
+
+    private fun claimHost(userId: String, roomId: String) {
+        viewModelScope.launch {
+            try {
+                // Clear all current hosts for this room
+                supabase.postgrest["room_players"].update(
+                    mapOf("is_host" to false)
+                ) { filter { eq("room_id", roomId) } }
+                
+                // Set myself as host
+                supabase.postgrest["room_players"].update(
+                    mapOf("is_host" to true)
+                ) {
+                    filter {
+                        eq("room_id", roomId)
+                        eq("player_id", userId)
+                    }
+                }
+                
+                // Update room
+                supabase.postgrest["rooms"].update(
+                    mapOf("host_id" to userId)
+                ) { filter { eq("id", roomId) } }
+            } catch (e: Exception) {}
         }
     }
 
