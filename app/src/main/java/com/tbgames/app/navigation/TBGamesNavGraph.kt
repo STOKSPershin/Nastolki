@@ -78,7 +78,7 @@ fun TBGamesNavGraph(
             AvatarSelectionScreen(
                 selectedPresetId = onboardingState.selectedPresetId,
                 onPresetSelected = onboardingViewModel::onPresetSelected,
-                onUploadPhoto = { /* TODO */ },
+                onCustomAvatarSelected = onboardingViewModel::onCustomAvatarSelected,
                 isLoading = onboardingState.isLoading,
                 error = onboardingState.error,
                 onDone = {
@@ -140,6 +140,7 @@ fun TBGamesNavGraph(
                 onSaveNickname = profileViewModel::saveNickname,
                 onCancelEditNickname = profileViewModel::cancelEditNickname,
                 onAvatarPresetSelected = profileViewModel::onAvatarPresetSelected,
+                onCustomAvatarSelected = profileViewModel::onCustomAvatarSelected,
                 onToggleSound = profileViewModel::toggleSound,
                 onToggleVibration = profileViewModel::toggleVibration,
                 onThemeModeChange = profileViewModel::setThemeMode,

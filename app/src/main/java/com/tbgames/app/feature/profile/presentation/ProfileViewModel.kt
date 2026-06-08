@@ -16,6 +16,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import android.content.Context
+import android.net.Uri
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.tbgames.app.feature.profile.data.AvatarStorageRepository
+import com.tbgames.app.core.utils.ImageHelper
 
 data class ProfileUiState(
     val profile: PlayerProfile? = null,
@@ -37,7 +42,9 @@ class ProfileViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val profileRepository: ProfileRepository,
     private val preferencesManager: PreferencesManager,
-    private val localProfileStorage: LocalProfileStorage
+    private val localProfileStorage: LocalProfileStorage,
+    private val avatarStorageRepository: AvatarStorageRepository,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUiState())
@@ -133,6 +140,40 @@ class ProfileViewModel @Inject constructor(
                 }
                 is AppResult.Error -> {
                     _uiState.update { it.copy(error = "Не удалось обновить аватар") }
+                }
+            }
+        }
+    }
+
+    fun onCustomAvatarSelected(uri: Uri) {
+        val profile = _uiState.value.profile ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            val bytes = ImageHelper.getCompressedAvatarBytes(context, uri)
+            if (bytes == null) {
+                _uiState.update { it.copy(isLoading = false, error = "Не удалось обработать фото") }
+                return@launch
+            }
+
+            when (val uploadResult = avatarStorageRepository.uploadAvatar(profile.id, bytes)) {
+                is AppResult.Success -> {
+                    val avatarUrl = uploadResult.data
+                    val updated = profile.copy(
+                        avatarType = Constants.AVATAR_TYPE_CUSTOM,
+                        avatarUrl = avatarUrl
+                    )
+                    when (profileRepository.updateProfile(updated)) {
+                        is AppResult.Success -> {
+                            localProfileStorage.saveProfile(updated)
+                            _uiState.update { it.copy(profile = updated, isLoading = false) }
+                        }
+                        is AppResult.Error -> {
+                            _uiState.update { it.copy(isLoading = false, error = "Не удалось обновить профиль") }
+                        }
+                    }
+                }
+                is AppResult.Error -> {
+                    _uiState.update { it.copy(isLoading = false, error = "Ошибка загрузки фото") }
                 }
             }
         }

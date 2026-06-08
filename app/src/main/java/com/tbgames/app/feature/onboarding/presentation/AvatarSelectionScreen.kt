@@ -28,6 +28,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import com.tbgames.app.core.common.Constants
 import com.tbgames.app.core.ui.components.AvatarCircle
 import com.tbgames.app.core.ui.components.LoadingButton
@@ -36,11 +38,19 @@ import com.tbgames.app.core.ui.components.LoadingButton
 fun AvatarSelectionScreen(
     selectedPresetId: Int,
     onPresetSelected: (Int) -> Unit,
-    onUploadPhoto: () -> Unit,
+    onCustomAvatarSelected: (android.net.Uri) -> Unit,
     isLoading: Boolean,
     error: String?,
     onDone: () -> Unit
 ) {
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            onCustomAvatarSelected(uri)
+        }
+    }
+
     Scaffold { paddingValues ->
         Column(
             modifier = Modifier
@@ -91,7 +101,13 @@ fun AvatarSelectionScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             OutlinedButton(
-                onClick = onUploadPhoto,
+                onClick = {
+                    photoPickerLauncher.launch(
+                        androidx.activity.result.PickVisualMediaRequest(
+                            ActivityResultContracts.PickVisualMedia.ImageOnly
+                        )
+                    )
+                },
                 modifier = Modifier.fillMaxWidth(),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
             ) {

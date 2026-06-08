@@ -49,6 +49,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import com.tbgames.app.core.common.Constants
 import com.tbgames.app.core.ui.components.AvatarCircle
 
@@ -62,6 +64,7 @@ fun ProfileSettingsScreen(
     onSaveNickname: () -> Unit,
     onCancelEditNickname: () -> Unit,
     onAvatarPresetSelected: (Int) -> Unit,
+    onCustomAvatarSelected: (android.net.Uri) -> Unit,
     onToggleSound: () -> Unit,
     onToggleVibration: () -> Unit,
     onThemeModeChange: (String) -> Unit,
@@ -69,6 +72,14 @@ fun ProfileSettingsScreen(
     onHideLogoutDialog: () -> Unit,
     onLogout: () -> Unit
 ) {
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            onCustomAvatarSelected(uri)
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -167,6 +178,23 @@ fun ProfileSettingsScreen(
                                 .clickable { onAvatarPresetSelected(presetId) }
                         )
                     }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                androidx.compose.material3.OutlinedButton(
+                    onClick = {
+                        photoPickerLauncher.launch(
+                            androidx.activity.result.PickVisualMediaRequest(
+                                ActivityResultContracts.PickVisualMedia.ImageOnly
+                            )
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Edit, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Загрузить своё фото")
                 }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))

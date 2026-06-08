@@ -16,6 +16,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.tbgames.app.feature.profile.data.AvatarStorageRepository
+import com.tbgames.app.core.utils.ImageHelper
 
 data class OnboardingUiState(
     val nickname: String = "",
@@ -32,7 +36,9 @@ data class OnboardingUiState(
 class OnboardingViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val profileRepository: ProfileRepository,
-    private val localProfileStorage: LocalProfileStorage
+    private val localProfileStorage: LocalProfileStorage,
+    private val avatarStorageRepository: AvatarStorageRepository,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(OnboardingUiState())
@@ -189,12 +195,32 @@ class OnboardingViewModel @Inject constructor(
                 }
             }
 
+            var avatarUrl: String? = null
+            if (_uiState.value.customAvatarUri != null) {
+                val uri = _uiState.value.customAvatarUri!!
+                val bytes = ImageHelper.getCompressedAvatarBytes(context, uri)
+                if (bytes != null) {
+                    when (val uploadResult = avatarStorageRepository.uploadAvatar(userId, bytes)) {
+                        is AppResult.Success -> {
+                            avatarUrl = uploadResult.data
+                        }
+                        is AppResult.Error -> {
+                            // Proceed without custom avatar if upload fails, or return error
+                            // We'll just fall back to preset if it fails
+                            _uiState.update { it.copy(error = "Не удалось загрузить фото. Использован стандартный аватар.") }
+                        }
+                    }
+                }
+            }
+
+            val finalAvatarType = if (avatarUrl != null) Constants.AVATAR_TYPE_CUSTOM else Constants.AVATAR_TYPE_PRESET
+
             val profile = PlayerProfile(
-                id = userId!!,
+                id = userId,
                 nickname = _uiState.value.nickname,
-                avatarType = if (_uiState.value.customAvatarUri != null)
-                    Constants.AVATAR_TYPE_CUSTOM else Constants.AVATAR_TYPE_PRESET,
+                avatarType = finalAvatarType,
                 avatarPresetId = _uiState.value.selectedPresetId,
+                avatarUrl = avatarUrl,
                 deviceId = deviceId
             )
 

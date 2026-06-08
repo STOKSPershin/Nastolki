@@ -101,6 +101,7 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     implementation(libs.image.cropper)
+    implementation("androidx.exifinterface:exifinterface:1.3.7")
 
     // Testing
     testImplementation(libs.junit)
