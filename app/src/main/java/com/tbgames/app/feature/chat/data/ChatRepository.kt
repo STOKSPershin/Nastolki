@@ -34,10 +34,11 @@ class ChatRepository @Inject constructor(
                 try {
                     val msgs = supabase.postgrest["messages"]
                         .select {
-                            order("created_at", Order.ASCENDING)
+                            order("created_at", Order.DESCENDING)
                             limit(100)
                         }
                         .decodeList<ChatMessage>()
+                        .reversed()
                     _messages.value = msgs
                     _isLoading.value = false
                 } catch (e: Exception) {
@@ -60,10 +61,11 @@ class ChatRepository @Inject constructor(
             // Immediately refresh
             val msgs = supabase.postgrest["messages"]
                 .select {
-                    order("created_at", Order.ASCENDING)
+                    order("created_at", Order.DESCENDING)
                     limit(100)
                 }
                 .decodeList<ChatMessage>()
+                .reversed()
             _messages.value = msgs
         } catch (e: Exception) {
             e.printStackTrace()
