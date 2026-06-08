@@ -110,14 +110,16 @@ class GameRoomViewModel @Inject constructor(
                     } catch (e: Exception) {}
 
                     val latestServerTime = playerInfos.mapNotNull {
-                        try { java.time.Instant.parse(it.profile.updatedAt) } catch (e: Exception) { null }
-                    }.maxOrNull() ?: java.time.Instant.now()
+                        parseSupabaseTime(it.profile.updatedAt).takeIf { t -> t > 0L }
+                    }.maxOrNull() ?: System.currentTimeMillis()
 
                     val activePlayerInfos = playerInfos.filter { info ->
-                        try {
-                            val updatedAt = java.time.Instant.parse(info.profile.updatedAt)
-                            java.time.Duration.between(updatedAt, latestServerTime).seconds <= 20
-                        } catch (e: Exception) { false }
+                        val updatedAt = parseSupabaseTime(info.profile.updatedAt)
+                        if (updatedAt > 0L) {
+                            (latestServerTime - updatedAt) <= 20000L
+                        } else {
+                            false
+                        }
                     }
 
                     val isHostMissing = activePlayerInfos.isNotEmpty() && activePlayerInfos.none { it.isHost }
@@ -293,17 +295,14 @@ class GameRoomViewModel @Inject constructor(
     fun updateSettings(settings: com.tbgames.app.core.domain.model.RoomSettings) {
         if (!_uiState.value.isCurrentUserHost) return
         val roomId = _uiState.value.roomId
+        if (roomId.isEmpty()) return
+
         viewModelScope.launch {
             try {
-                // Use explicit mapping to avoid json serialization issues with update
                 supabase.postgrest["rooms"].update(
                     mapOf("settings" to settings)
-                ) {
-                    filter { eq("id", roomId) }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+                ) { filter { eq("id", roomId) } }
+            } catch (e: Exception) {}
         }
     }
 
@@ -467,5 +466,23 @@ class GameRoomViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         pollingJob?.cancel()
+    }
+
+    private fun parseSupabaseTime(timeString: String?): Long {
+        if (timeString == null) return 0L
+        try {
+            var clean = timeString.replace(" ", "T")
+            if (clean.endsWith("+00")) {
+                clean = clean.substringBeforeLast("+00") + "Z"
+            } else if (clean.endsWith("+00:00")) {
+                clean = clean.substringBeforeLast("+00:00") + "Z"
+            }
+            if (!clean.contains("Z") && !clean.contains("+") && clean.lastIndexOf("-") < 10) {
+                clean += "Z"
+            }
+            return java.time.Instant.parse(clean).toEpochMilli()
+        } catch (e: Exception) {
+            return 0L
+        }
     }
 }

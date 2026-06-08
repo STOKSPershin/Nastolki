@@ -57,17 +57,17 @@ class PresenceRepository @Inject constructor(
                         .decodeList<com.tbgames.app.core.domain.model.PlayerProfile>()
 
                     val latestServerTime = allProfiles.mapNotNull {
-                        try { java.time.Instant.parse(it.updatedAt) } catch (e: Exception) { null }
-                    }.maxOrNull() ?: java.time.Instant.now()
+                        parseSupabaseTime(it.updatedAt).takeIf { t -> t > 0L }
+                    }.maxOrNull() ?: System.currentTimeMillis()
 
                     val players = allProfiles
                         .filter { it.status != null && it.status != "offline" }
                         .filter { profile ->
-                            try {
-                                val updatedAt = java.time.Instant.parse(profile.updatedAt)
-                                java.time.Duration.between(updatedAt, latestServerTime).seconds <= 20
-                            } catch (e: Exception) {
-                                false // If no updatedAt or invalid format, assume offline
+                            val updatedAt = parseSupabaseTime(profile.updatedAt)
+                            if (updatedAt > 0L) {
+                                (latestServerTime - updatedAt) <= 20000L
+                            } else {
+                                false
                             }
                         }
                         .map { p ->
@@ -124,5 +124,23 @@ class PresenceRepository @Inject constructor(
 
     fun updatePlayersList(players: List<OnlinePlayer>) {
         _onlinePlayers.value = players
+    }
+
+    private fun parseSupabaseTime(timeString: String?): Long {
+        if (timeString == null) return 0L
+        try {
+            var clean = timeString.replace(" ", "T")
+            if (clean.endsWith("+00")) {
+                clean = clean.substringBeforeLast("+00") + "Z"
+            } else if (clean.endsWith("+00:00")) {
+                clean = clean.substringBeforeLast("+00:00") + "Z"
+            }
+            if (!clean.contains("Z") && !clean.contains("+") && clean.lastIndexOf("-") < 10) {
+                clean += "Z"
+            }
+            return java.time.Instant.parse(clean).toEpochMilli()
+        } catch (e: Exception) {
+            return 0L
+        }
     }
 }
