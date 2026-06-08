@@ -38,19 +38,6 @@ fun FakeArtistGameContent(
             .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Категория
-        Text(
-            text = "Категория",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = gameState.category,
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-        )
-
         Spacer(modifier = Modifier.height(16.dp))
 
         // Загаданное слово

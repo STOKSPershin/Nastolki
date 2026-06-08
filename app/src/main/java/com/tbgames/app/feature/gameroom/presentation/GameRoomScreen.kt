@@ -86,16 +86,42 @@ fun GameRoomScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text(
-                            text = "${state.gameInfo.emoji} ${state.gameInfo.name}",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = state.roomName,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        val isFakeArtistPlaying = state.roomStatus == "playing" && state.gameInfo.id == "fake_artist" && state.gameState != null
+                        if (isFakeArtistPlaying) {
+                            val fakeArtistGameState = try {
+                                kotlinx.serialization.json.Json.decodeFromJsonElement(
+                                    com.tbgames.app.feature.gameroom.domain.model.FakeArtistGameState.serializer(),
+                                    state.gameState!!
+                                )
+                            } catch (e: Exception) { null }
+
+                            if (fakeArtistGameState != null) {
+                                Text(
+                                    text = "Категория:",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = fakeArtistGameState.category,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            } else {
+                                Text(text = "${state.gameInfo.emoji} ${state.gameInfo.name}", fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            Text(
+                                text = "${state.gameInfo.emoji} ${state.gameInfo.name}",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = state.roomName,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 },
                 navigationIcon = {
@@ -126,7 +152,7 @@ fun GameRoomScreen(
                 CircularProgressIndicator()
             }
         } else {
-            if (state.roomStatus == "playing" && state.gameInfo.id == "fake_artist" && state.gameState != null) {
+            if ((state.roomStatus == "playing" || state.roomStatus == "game_over") && state.gameInfo.id == "fake_artist" && state.gameState != null) {
                 val fakeArtistGameState = try {
                     kotlinx.serialization.json.Json.decodeFromJsonElement(
                         com.tbgames.app.feature.gameroom.domain.model.FakeArtistGameState.serializer(),
@@ -135,14 +161,27 @@ fun GameRoomScreen(
                 } catch (e: Exception) { null }
 
                 if (fakeArtistGameState != null) {
-                    FakeArtistGameContent(
-                        gameState = fakeArtistGameState,
-                        settings = state.settings,
-                        players = state.players,
-                        currentUserId = state.currentUserId,
-                        isHost = state.isCurrentUserHost,
-                        onRoundResult = onRoundResult
-                    )
+                    Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+                        if (state.roomStatus == "game_over") {
+                            com.tbgames.app.feature.gameroom.presentation.GameOverScreen(
+                                gameState = fakeArtistGameState,
+                                players = state.players,
+                                onExit = {
+                                    onLeaveRoom()
+                                    onBackClick()
+                                }
+                            )
+                        } else {
+                            FakeArtistGameContent(
+                                gameState = fakeArtistGameState,
+                                settings = state.settings,
+                                players = state.players,
+                                currentUserId = state.currentUserId,
+                                isHost = state.isCurrentUserHost,
+                                onRoundResult = onRoundResult
+                            )
+                        }
+                    }
                 }
             } else {
                 Column(
