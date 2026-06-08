@@ -109,11 +109,14 @@ class GameRoomViewModel @Inject constructor(
                         ) { filter { eq("id", userId) } }
                     } catch (e: Exception) {}
 
-                    val now = java.time.Instant.now()
+                    val latestServerTime = playerInfos.mapNotNull {
+                        try { java.time.Instant.parse(it.profile.updatedAt) } catch (e: Exception) { null }
+                    }.maxOrNull() ?: java.time.Instant.now()
+
                     val activePlayerInfos = playerInfos.filter { info ->
                         try {
                             val updatedAt = java.time.Instant.parse(info.profile.updatedAt)
-                            java.time.Duration.between(updatedAt, now).seconds < 15
+                            java.time.Duration.between(updatedAt, latestServerTime).seconds <= 20
                         } catch (e: Exception) { false }
                     }
 
