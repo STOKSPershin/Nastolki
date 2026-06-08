@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -58,7 +59,8 @@ fun LobbyScreen(
     onCreateClick: () -> Unit,
     onHideGameSelectDialog: () -> Unit,
     onSelectGame: (GameInfo) -> Unit,
-    onJoinRoom: (String) -> Unit
+    onJoinRoom: (String) -> Unit,
+    onRefreshClick: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -83,6 +85,9 @@ fun LobbyScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onRefreshClick) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Обновить")
+                    }
                     IconButton(onClick = onSettingsClick) {
                         Icon(Icons.Default.Settings, contentDescription = "Настройки")
                     }

@@ -116,7 +116,8 @@ fun TBGamesNavGraph(
                 onJoinRoom = { roomId ->
                     lobbyViewModel.joinRoom(roomId)
                     navController.navigate(Routes.gameRoom(roomId))
-                }
+                },
+                onRefreshClick = lobbyViewModel::loadRooms
             )
         }
 
