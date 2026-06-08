@@ -27,7 +27,8 @@ import javax.inject.Inject
 
 data class RoomPlayerInfo(
     val profile: PlayerProfile,
-    val isHost: Boolean
+    val isHost: Boolean,
+    val isReady: Boolean = false
 )
 
 data class GameRoomUiState(
@@ -41,6 +42,8 @@ data class GameRoomUiState(
     val showRules: Boolean = false,
     val isRoomClosed: Boolean = false,
     val settings: com.tbgames.app.core.domain.model.RoomSettings = com.tbgames.app.core.domain.model.RoomSettings(),
+    val roomStatus: String = "waiting",
+    val gameState: kotlinx.serialization.json.JsonElement? = null,
     val error: String? = null
 )
 
@@ -81,7 +84,7 @@ class GameRoomViewModel @Inject constructor(
                         _uiState.update { it.copy(isRoomClosed = true, isLoading = false) }
                         break
                     }
-                    _uiState.update { it.copy(roomName = room.name, settings = room.settings) }
+                    _uiState.update { it.copy(roomName = room.name, settings = room.settings, roomStatus = room.status, gameState = room.gameState) }
 
                     // Load players in room
                     val roomPlayers = supabase.postgrest["room_players"].select {
@@ -94,7 +97,7 @@ class GameRoomViewModel @Inject constructor(
                                 filter { eq("id", rp.playerId) }
                             }.decodeList<PlayerProfile>()
                             profiles.firstOrNull()?.let { profile ->
-                                RoomPlayerInfo(profile = profile, isHost = rp.isHost)
+                                RoomPlayerInfo(profile = profile, isHost = rp.isHost, isReady = rp.isReady)
                             }
                         } catch (e: Exception) { null }
                     }
@@ -113,6 +116,76 @@ class GameRoomViewModel @Inject constructor(
                     _uiState.update { it.copy(isLoading = false) }
                 }
                 delay(3000)
+            }
+        }
+    }
+
+    fun startReadyCheck() {
+        if (!_uiState.value.isCurrentUserHost) return
+        viewModelScope.launch {
+            try {
+                supabase.postgrest["rooms"].update(
+                    mapOf("status" to "ready_check")
+                ) { filter { eq("id", _uiState.value.roomId) } }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun toggleReady(isReady: Boolean) {
+        viewModelScope.launch {
+            try {
+                supabase.postgrest["room_players"].update(
+                    mapOf("is_ready" to isReady)
+                ) {
+                    filter {
+                        eq("room_id", _uiState.value.roomId)
+                        eq("player_id", _uiState.value.currentUserId)
+                    }
+                }
+                
+                // If I am host, check if everyone is ready to auto-start.
+                // Wait, maybe we just let the host click 'Start' or do it automatically.
+                // The user said: "когда все игроки в комнате нажали что готовы игра стартует"
+                // So if everyone is ready, transition to playing.
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun startGame() {
+        if (!_uiState.value.isCurrentUserHost) return
+        viewModelScope.launch {
+            try {
+                val players = _uiState.value.players
+                if (players.isEmpty()) return@launch
+
+                val spyId = players.random().profile.id
+                val (category, word) = com.tbgames.app.feature.gameroom.domain.model.FakeArtistDictionary.getRandomWord()
+                
+                val initialState = com.tbgames.app.feature.gameroom.domain.model.FakeArtistGameState(
+                    category = category,
+                    word = word,
+                    spyId = spyId,
+                    round = 1,
+                    scores = players.associate { it.profile.id to 0 }
+                )
+                
+                val jsonState = kotlinx.serialization.json.Json.encodeToJsonElement(
+                    com.tbgames.app.feature.gameroom.domain.model.FakeArtistGameState.serializer(), 
+                    initialState
+                )
+
+                supabase.postgrest["rooms"].update(
+                    mapOf(
+                        "status" to "playing",
+                        "game_state" to jsonState
+                    )
+                ) { filter { eq("id", _uiState.value.roomId) } }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
     }
@@ -205,6 +278,81 @@ class GameRoomViewModel @Inject constructor(
                     ) {
                         filter { eq("id", roomId) }
                     }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun handleRoundResult(spyPoints: Int) {
+        if (!_uiState.value.isCurrentUserHost) return
+        
+        viewModelScope.launch {
+            try {
+                val currentState = _uiState.value.gameState ?: return@launch
+                
+                val fakeArtistGameState = kotlinx.serialization.json.Json.decodeFromJsonElement(
+                    com.tbgames.app.feature.gameroom.domain.model.FakeArtistGameState.serializer(),
+                    currentState
+                )
+                
+                val players = _uiState.value.players
+                val newScores = fakeArtistGameState.scores.toMutableMap()
+                
+                if (spyPoints > 0) {
+                    val currentSpyScore = newScores[fakeArtistGameState.spyId] ?: 0
+                    newScores[fakeArtistGameState.spyId] = currentSpyScore + spyPoints
+                } else {
+                    players.forEach { player ->
+                        if (player.profile.id != fakeArtistGameState.spyId) {
+                            val currentScore = newScores[player.profile.id] ?: 0
+                            newScores[player.profile.id] = currentScore + 1
+                        }
+                    }
+                }
+                
+                val settings = _uiState.value.settings
+                val isVictory = if (settings.victoryType == "rounds") {
+                    fakeArtistGameState.round >= settings.victoryValue
+                } else {
+                    newScores.values.any { it >= settings.victoryValue }
+                }
+                
+                if (isVictory) {
+                    // Update final scores and set status to game_over
+                    val finalState = fakeArtistGameState.copy(scores = newScores)
+                    val jsonState = kotlinx.serialization.json.Json.encodeToJsonElement(
+                        com.tbgames.app.feature.gameroom.domain.model.FakeArtistGameState.serializer(),
+                        finalState
+                    )
+                    supabase.postgrest["rooms"].update(
+                        mapOf(
+                            "status" to "game_over",
+                            "game_state" to jsonState
+                        )
+                    ) { filter { eq("id", _uiState.value.roomId) } }
+                } else {
+                    // Next round
+                    val spyId = players.random().profile.id
+                    val (category, word) = com.tbgames.app.feature.gameroom.domain.model.FakeArtistDictionary.getRandomWord()
+                    
+                    val nextState = fakeArtistGameState.copy(
+                        round = fakeArtistGameState.round + 1,
+                        spyId = spyId,
+                        category = category,
+                        word = word,
+                        scores = newScores
+                    )
+                    
+                    val jsonState = kotlinx.serialization.json.Json.encodeToJsonElement(
+                        com.tbgames.app.feature.gameroom.domain.model.FakeArtistGameState.serializer(),
+                        nextState
+                    )
+                    
+                    supabase.postgrest["rooms"].update(
+                        mapOf("game_state" to jsonState)
+                    ) { filter { eq("id", _uiState.value.roomId) } }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()

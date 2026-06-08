@@ -19,7 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarOutline
@@ -43,10 +43,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.background
 import com.tbgames.app.core.ui.components.AvatarCircle
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -57,9 +65,21 @@ fun GameRoomScreen(
     onToggleRules: () -> Unit,
     onTransferHost: (String) -> Unit,
     onLeaveRoom: () -> Unit,
-    onSettingsChange: (com.tbgames.app.core.domain.model.RoomSettings) -> Unit
+    onSettingsChange: (com.tbgames.app.core.domain.model.RoomSettings) -> Unit,
+    onStartReadyCheck: () -> Unit,
+    onToggleReady: (Boolean) -> Unit,
+    onStartGame: () -> Unit,
+    onRoundResult: (Int) -> Unit
 ) {
     var showLeaveDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(state.roomStatus, state.players) {
+        if (state.isCurrentUserHost && state.roomStatus == "ready_check" && state.players.isNotEmpty()) {
+            if (state.players.all { it.isReady }) {
+                onStartGame()
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -106,12 +126,31 @@ fun GameRoomScreen(
                 CircularProgressIndicator()
             }
         } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(horizontal = 16.dp)
-            ) {
+            if (state.roomStatus == "playing" && state.gameInfo.id == "fake_artist" && state.gameState != null) {
+                val fakeArtistGameState = try {
+                    kotlinx.serialization.json.Json.decodeFromJsonElement(
+                        com.tbgames.app.feature.gameroom.domain.model.FakeArtistGameState.serializer(),
+                        state.gameState
+                    )
+                } catch (e: Exception) { null }
+
+                if (fakeArtistGameState != null) {
+                    FakeArtistGameContent(
+                        gameState = fakeArtistGameState,
+                        settings = state.settings,
+                        players = state.players,
+                        currentUserId = state.currentUserId,
+                        isHost = state.isCurrentUserHost,
+                        onRoundResult = onRoundResult
+                    )
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues)
+                        .padding(horizontal = 16.dp)
+                ) {
                 Spacer(modifier = Modifier.height(8.dp))
 
                 if (state.gameInfo.id == "fake_artist") {
@@ -150,6 +189,17 @@ fun GameRoomScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
+                if (state.isCurrentUserHost && state.roomStatus == "waiting") {
+                    Button(
+                        onClick = onStartReadyCheck,
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Начать игру", fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
                 // Rules button
                 OutlinedButton(
                     onClick = onToggleRules,
@@ -179,7 +229,7 @@ fun GameRoomScreen(
                         containerColor = MaterialTheme.colorScheme.error
                     )
                 ) {
-                    Icon(Icons.Default.ExitToApp, contentDescription = null)
+                    Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Покинуть комнату")
                 }
@@ -187,8 +237,10 @@ fun GameRoomScreen(
                 Spacer(modifier = Modifier.height(16.dp))
             }
         }
+    }
+}
 
-        // Rules dialog
+    // Rules dialog
         if (state.showRules) {
             AlertDialog(
                 onDismissRequest = onToggleRules,
@@ -214,33 +266,83 @@ fun GameRoomScreen(
             )
         }
 
-        // Host leave confirmation dialog
         if (showLeaveDialog) {
             AlertDialog(
                 onDismissRequest = { showLeaveDialog = false },
-                title = { Text("Покинуть комнату?") },
-                text = {
-                    Text("Если вы выйдете, комната закроется. Вы уверены?")
-                },
+                title = { Text("Выйти из комнаты?") },
+                text = { Text("Вы являетесь ведущим. Если вы выйдете, комната будет удалена, а все игроки отключены.") },
                 confirmButton = {
-                    TextButton(
-                        onClick = {
-                            showLeaveDialog = false
-                            onLeaveRoom()
-                            onBackClick()
-                        }
-                    ) {
-                        Text("Да, покинуть", color = MaterialTheme.colorScheme.error)
-                    }
+                    TextButton(onClick = {
+                        showLeaveDialog = false
+                        onLeaveRoom()
+                        onBackClick()
+                    }) { Text("Выйти", color = MaterialTheme.colorScheme.error) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showLeaveDialog = false }) {
-                        Text("Нет, остаться")
-                    }
+                    TextButton(onClick = { showLeaveDialog = false }) { Text("Отмена") }
                 }
             )
         }
-    }
+
+        if (state.roomStatus == "ready_check") {
+            ReadyCheckDialog(
+                players = state.players,
+                currentUserId = state.currentUserId,
+                onToggleReady = onToggleReady
+            )
+        }
+}
+
+@Composable
+fun ReadyCheckDialog(
+    players: List<RoomPlayerInfo>,
+    currentUserId: String,
+    onToggleReady: (Boolean) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = { /* Cannot dismiss manually */ },
+        title = { Text("Готовность к игре", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                players.forEach { player ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(12.dp)
+                                .background(
+                                    if (player.isReady) Color.Green 
+                                    else Color.Gray,
+                                    shape = CircleShape
+                                )
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = player.profile.nickname,
+                            color = if (player.isReady) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            fontWeight = if (player.profile.id == currentUserId) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            val me = players.find { it.profile.id == currentUserId }
+            if (me != null) {
+                Button(
+                    onClick = { onToggleReady(!me.isReady) },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (me.isReady) Color.Gray else MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Text(if (me.isReady) "Не готов" else "Готов!")
+                }
+            }
+        },
+        properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
+    )
 }
 
 @Composable
@@ -333,7 +435,9 @@ private fun RoomSettingsSection(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+        )
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(
@@ -350,7 +454,7 @@ private fun RoomSettingsSection(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     androidx.compose.material3.RadioButton(
                         selected = settings.victoryType == "rounds",
-                        onClick = { if (isHost) onSettingsChange(settings.copy(victoryType = "rounds", victoryValue = 10)) },
+                        onClick = { if (isHost) onSettingsChange(settings.copy(victoryType = "rounds", victoryValue = 1)) },
                         enabled = isHost,
                         modifier = Modifier.size(24.dp)
                     )
@@ -360,7 +464,7 @@ private fun RoomSettingsSection(
 
                     androidx.compose.material3.RadioButton(
                         selected = settings.victoryType == "points",
-                        onClick = { if (isHost) onSettingsChange(settings.copy(victoryType = "points", victoryValue = 100)) },
+                        onClick = { if (isHost) onSettingsChange(settings.copy(victoryType = "points", victoryValue = 1)) },
                         enabled = isHost,
                         modifier = Modifier.size(24.dp)
                     )
@@ -380,38 +484,40 @@ private fun RoomSettingsSection(
                     style = MaterialTheme.typography.bodyMedium
                 )
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    androidx.compose.material3.IconButton(
-                        onClick = {
-                            if (isHost && settings.victoryValue > 1) {
-                                val step = if (settings.victoryType == "points") 10 else 1
-                                onSettingsChange(settings.copy(victoryValue = maxOf(1, settings.victoryValue - step)))
-                            }
-                        },
-                        enabled = isHost,
-                        modifier = Modifier.size(32.dp)
+                Box {
+                    var expanded by remember { mutableStateOf(false) }
+                    
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clickable(enabled = isHost) { expanded = true }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
-                        Text("-", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            text = settings.victoryValue.toString(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Icon(
+                            Icons.Filled.ArrowDropDown,
+                            contentDescription = "Выбрать",
+                            tint = if (isHost) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                        )
                     }
 
-                    Text(
-                        text = settings.victoryValue.toString(),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 4.dp)
-                    )
-
-                    androidx.compose.material3.IconButton(
-                        onClick = {
-                            if (isHost) {
-                                val step = if (settings.victoryType == "points") 10 else 1
-                                onSettingsChange(settings.copy(victoryValue = settings.victoryValue + step))
-                            }
-                        },
-                        enabled = isHost,
-                        modifier = Modifier.size(32.dp)
+                    DropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
                     ) {
-                        Text("+", style = MaterialTheme.typography.titleMedium)
+                        (1..50).forEach { value ->
+                            DropdownMenuItem(
+                                text = { Text(value.toString()) },
+                                onClick = {
+                                    onSettingsChange(settings.copy(victoryValue = value))
+                                    expanded = false
+                                }
+                            )
+                        }
                     }
                 }
             }

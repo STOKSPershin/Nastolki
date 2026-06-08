@@ -25,6 +25,8 @@ data class GameRoom(
     @SerialName("current_players")
     val currentPlayers: Int = 0,
     val settings: RoomSettings = RoomSettings(),
+    @SerialName("game_state")
+    val gameState: kotlinx.serialization.json.JsonElement? = null,
     @SerialName("created_at")
     val createdAt: String? = null
 )

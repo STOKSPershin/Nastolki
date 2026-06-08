@@ -7,5 +7,6 @@ import kotlinx.serialization.Serializable
 data class RoomPlayer(
     @SerialName("room_id") val roomId: String,
     @SerialName("player_id") val playerId: String,
-    @SerialName("is_host") val isHost: Boolean = false
+    @SerialName("is_host") val isHost: Boolean = false,
+    @SerialName("is_ready") val isReady: Boolean = false
 )

@@ -58,4 +58,25 @@ class RoomRepository @Inject constructor(
             ) { filter { eq("id", roomId) } }
         }
     }
+
+    suspend fun updateRoomStatus(roomId: String, status: String): AppResult<Unit> = safeCall {
+        supabase.postgrest["rooms"].update(
+            mapOf("status" to status)
+        ) { filter { eq("id", roomId) } }
+    }
+
+    suspend fun updatePlayerReady(roomId: String, playerId: String, isReady: Boolean): AppResult<Unit> = safeCall {
+        supabase.postgrest["room_players"].update(
+            mapOf("is_ready" to isReady)
+        ) { filter { 
+            eq("room_id", roomId)
+            eq("player_id", playerId)
+        } }
+    }
+
+    suspend fun updateGameState(roomId: String, gameState: kotlinx.serialization.json.JsonElement): AppResult<Unit> = safeCall {
+        supabase.postgrest["rooms"].update(
+            mapOf("game_state" to gameState)
+        ) { filter { eq("id", roomId) } }
+    }
 }

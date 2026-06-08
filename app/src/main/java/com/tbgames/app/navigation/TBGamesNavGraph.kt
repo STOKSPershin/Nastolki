@@ -177,7 +177,11 @@ fun TBGamesNavGraph(
                 onToggleRules = gameRoomViewModel::toggleRules,
                 onTransferHost = gameRoomViewModel::transferHost,
                 onLeaveRoom = gameRoomViewModel::leaveRoom,
-                onSettingsChange = gameRoomViewModel::updateSettings
+                onSettingsChange = gameRoomViewModel::updateSettings,
+                onStartReadyCheck = gameRoomViewModel::startReadyCheck,
+                onToggleReady = gameRoomViewModel::toggleReady,
+                onStartGame = gameRoomViewModel::startGame,
+                onRoundResult = gameRoomViewModel::handleRoundResult
             )
         }
     }
