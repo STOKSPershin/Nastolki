@@ -38,6 +38,7 @@ fun AvatarSelectionScreen(
     onPresetSelected: (Int) -> Unit,
     onUploadPhoto: () -> Unit,
     isLoading: Boolean,
+    error: String?,
     onDone: () -> Unit
 ) {
     Scaffold { paddingValues ->
@@ -100,6 +101,15 @@ fun AvatarSelectionScreen(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
+
+            if (!error.isNullOrEmpty()) {
+                Text(
+                    text = error,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+            }
 
             LoadingButton(
                 text = "\u0413\u043E\u0442\u043E\u0432\u043E!",

@@ -204,7 +204,11 @@ class OnboardingViewModel @Inject constructor(
                     _uiState.update { it.copy(isLoading = false, isProfileCreated = true) }
                 }
                 is AppResult.Error -> {
-                    _uiState.update { it.copy(isLoading = false, error = "Не удалось создать профиль") }
+                    // If creating the profile fails, the auth session might be stale or invalid (e.g., account deleted on server)
+                    viewModelScope.launch {
+                        authRepository.signOut()
+                    }
+                    _uiState.update { it.copy(isLoading = false, error = "Не удалось создать профиль. Возможно, аккаунт был сброшен. Попробуйте нажать Готово еще раз.") }
                 }
             }
         }

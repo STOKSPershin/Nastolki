@@ -78,10 +78,9 @@ fun TBGamesNavGraph(
             AvatarSelectionScreen(
                 selectedPresetId = onboardingState.selectedPresetId,
                 onPresetSelected = onboardingViewModel::onPresetSelected,
-                onUploadPhoto = {
-                    // TODO: Launch image picker
-                },
+                onUploadPhoto = { /* TODO */ },
                 isLoading = onboardingState.isLoading,
+                error = onboardingState.error,
                 onDone = {
                     onboardingViewModel.createProfile()
                 }
