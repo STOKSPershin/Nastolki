@@ -69,7 +69,7 @@ private val DarkColorScheme = darkColorScheme(
 
 @Composable
 fun TBGamesTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = true,
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
