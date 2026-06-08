@@ -178,10 +178,17 @@ class GameRoomViewModel @Inject constructor(
                     initialState
                 )
 
+                @kotlinx.serialization.Serializable
+                data class RoomStartUpdate(
+                    val status: String,
+                    @kotlinx.serialization.SerialName("game_state")
+                    val gameState: kotlinx.serialization.json.JsonElement
+                )
+
                 supabase.postgrest["rooms"].update(
-                    mapOf(
-                        "status" to "playing",
-                        "game_state" to jsonState
+                    RoomStartUpdate(
+                        status = "playing",
+                        gameState = jsonState
                     )
                 ) { filter { eq("id", _uiState.value.roomId) } }
             } catch (e: Exception) {
@@ -326,10 +333,17 @@ class GameRoomViewModel @Inject constructor(
                         com.tbgames.app.feature.gameroom.domain.model.FakeArtistGameState.serializer(),
                         finalState
                     )
+                    @kotlinx.serialization.Serializable
+                    data class GameOverUpdate(
+                        val status: String,
+                        @kotlinx.serialization.SerialName("game_state")
+                        val gameState: kotlinx.serialization.json.JsonElement
+                    )
+                    
                     supabase.postgrest["rooms"].update(
-                        mapOf(
-                            "status" to "game_over",
-                            "game_state" to jsonState
+                        GameOverUpdate(
+                            status = "game_over",
+                            gameState = jsonState
                         )
                     ) { filter { eq("id", _uiState.value.roomId) } }
                 } else {
@@ -350,8 +364,14 @@ class GameRoomViewModel @Inject constructor(
                         nextState
                     )
                     
+                    @kotlinx.serialization.Serializable
+                    data class NextRoundUpdate(
+                        @kotlinx.serialization.SerialName("game_state")
+                        val gameState: kotlinx.serialization.json.JsonElement
+                    )
+
                     supabase.postgrest["rooms"].update(
-                        mapOf("game_state" to jsonState)
+                        NextRoundUpdate(gameState = jsonState)
                     ) { filter { eq("id", _uiState.value.roomId) } }
                 }
             } catch (e: Exception) {
