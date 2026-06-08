@@ -1,0 +1,67 @@
+<resources>
+    <string name="app_name">TB Games</string>
+
+    <!-- Онбординг -->
+    <string name="onboarding_welcome">Добро пожаловать!</string>
+    <string name="onboarding_nickname_title">Как тебя зовут?</string>
+    <string name="onboarding_nickname_hint">Придумай никнейм</string>
+    <string name="onboarding_nickname_error_short">Минимум 3 символа</string>
+    <string name="onboarding_nickname_error_long">Максимум 16 символов</string>
+    <string name="onboarding_nickname_error_invalid">Только буквы, цифры и подчёркивание</string>
+    <string name="onboarding_nickname_error_taken">Этот никнейм уже занят</string>
+    <string name="onboarding_avatar_title">Выбери аватар</string>
+    <string name="onboarding_avatar_upload">Или загрузи своё фото</string>
+    <string name="onboarding_next">Далее</string>
+    <string name="onboarding_done">Готово!</string>
+
+    <!-- Лобби -->
+    <string name="lobby_title">Лобби</string>
+    <string name="lobby_players_online">%d игроков онлайн</string>
+    <string name="lobby_players_tab">Игроки</string>
+    <string name="lobby_rooms_tab">Комнаты</string>
+    <string name="lobby_profile_tab">Профиль</string>
+    <string name="lobby_no_players">Пока никого нет</string>
+    <string name="lobby_no_rooms">Нет активных комнат</string>
+    <string name="lobby_create_room">Создать комнату</string>
+    <string name="lobby_player_status_in_lobby">В лобби</string>
+    <string name="lobby_player_status_in_game">В игре</string>
+    <string name="lobby_player_status_in_room">В комнате</string>
+
+    <!-- Комнаты -->
+    <string name="room_create_title">Новая комната</string>
+    <string name="room_name_hint">Название комнаты</string>
+    <string name="room_max_players">Макс. игроков</string>
+    <string name="room_create">Создать</string>
+    <string name="room_cancel">Отмена</string>
+    <string name="room_join">Войти</string>
+    <string name="room_leave">Выйти</string>
+    <string name="room_ready">Готов</string>
+    <string name="room_not_ready">Не готов</string>
+    <string name="room_start_game">Начать игру</string>
+    <string name="room_waiting">Ожидание игроков…</string>
+    <string name="room_players_count">%1$d / %2$d</string>
+    <string name="room_host">Хост</string>
+
+    <!-- Настройки профиля -->
+    <string name="profile_title">Профиль</string>
+    <string name="profile_edit_nickname">Изменить никнейм</string>
+    <string name="profile_edit_avatar">Изменить аватар</string>
+    <string name="profile_sound">Звук</string>
+    <string name="profile_vibration">Вибрация</string>
+    <string name="profile_theme">Тема</string>
+    <string name="profile_theme_light">Светлая</string>
+    <string name="profile_theme_dark">Тёмная</string>
+    <string name="profile_theme_system">Системная</string>
+    <string name="profile_stats">Статистика</string>
+    <string name="profile_stats_wins">Побед</string>
+    <string name="profile_stats_losses">Поражений</string>
+    <string name="profile_stats_total">Всего игр</string>
+    <string name="profile_logout">Выйти</string>
+    <string name="profile_save">Сохранить</string>
+
+    <!-- Общие -->
+    <string name="error_network">Ошибка сети. Проверьте подключение.</string>
+    <string name="error_unknown">Что-то пошло не так</string>
+    <string name="loading">Загрузка…</string>
+    <string name="retry">Повторить</string>
+</resources>
