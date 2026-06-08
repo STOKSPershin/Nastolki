@@ -165,11 +165,6 @@ fun TBGamesNavGraph(
             val gameRoomViewModel: GameRoomViewModel = hiltViewModel()
             val gameRoomState by gameRoomViewModel.uiState.collectAsState()
 
-            androidx.compose.runtime.LaunchedEffect(gameRoomState.isRoomClosed) {
-                if (gameRoomState.isRoomClosed) {
-                    navController.popBackStack(Routes.LOBBY, inclusive = false)
-                }
-            }
 
             GameRoomScreen(
                 state = gameRoomState,
