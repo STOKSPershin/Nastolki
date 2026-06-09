@@ -210,5 +210,16 @@ private fun ChatBubble(
                 )
             }
         }
+
+        if (isMe) {
+            Spacer(modifier = Modifier.width(8.dp))
+            AvatarCircle(
+                avatarType = message.avatarType,
+                avatarPresetId = message.avatarPresetId,
+                avatarUrl = message.avatarUrl,
+                size = 32.dp,
+                isOnline = true
+            )
+        }
     }
 }
