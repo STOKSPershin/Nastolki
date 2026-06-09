@@ -16,6 +16,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.postgrest.postgrest
+
 data class ChatUiState(
     val messages: List<ChatMessage> = emptyList(),
     val currentMessage: String = "",
@@ -27,7 +30,8 @@ data class ChatUiState(
 class ChatViewModel @Inject constructor(
     private val chatRepository: ChatRepository,
     private val authRepository: AuthRepository,
-    private val profileRepository: ProfileRepository
+    private val profileRepository: ProfileRepository,
+    private val supabase: SupabaseClient
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -54,7 +58,34 @@ class ChatViewModel @Inject constructor(
     private fun observeMessages() {
         viewModelScope.launch {
             chatRepository.messages.collect { msgs ->
-                _uiState.update { it.copy(messages = msgs) }
+                try {
+                    val userIds = msgs.map { it.userId }.distinct()
+                    if (userIds.isNotEmpty()) {
+                        val profiles = supabase.postgrest["profiles"].select {
+                            filter { isIn("id", userIds) }
+                        }.decodeList<PlayerProfile>()
+                        
+                        val mappedMsgs = msgs.map { msg ->
+                            val profile = profiles.find { it.id == msg.userId }
+                            if (profile != null) {
+                                msg.copy(
+                                    nickname = profile.nickname,
+                                    avatarType = profile.avatarType,
+                                    avatarPresetId = profile.avatarPresetId,
+                                    avatarUrl = profile.avatarUrl
+                                )
+                            } else {
+                                msg
+                            }
+                        }
+                        _uiState.update { it.copy(messages = mappedMsgs) }
+                    } else {
+                        _uiState.update { it.copy(messages = emptyList()) }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    _uiState.update { it.copy(messages = msgs) }
+                }
             }
         }
         viewModelScope.launch {
