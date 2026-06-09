@@ -10,6 +10,7 @@ data class ChatMessage(
     val nickname: String,
     @SerialName("avatar_type") val avatarType: String = "preset",
     @SerialName("avatar_preset_id") val avatarPresetId: Int = 1,
+    @SerialName("avatar_url") val avatarUrl: String? = null,
     val content: String,
     @SerialName("created_at") val createdAt: String = ""
 )

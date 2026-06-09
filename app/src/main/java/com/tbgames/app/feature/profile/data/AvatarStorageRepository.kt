@@ -19,7 +19,8 @@ class AvatarStorageRepository @Inject constructor(
         bucket.upload(path, imageBytes) {
             upsert = true
         }
-        bucket.publicUrl(path)
+        val baseUrl = bucket.publicUrl(path)
+        "$baseUrl?t=${System.currentTimeMillis()}"
     }
 
     suspend fun deleteAvatar(userId: String): AppResult<Unit> = safeCall {

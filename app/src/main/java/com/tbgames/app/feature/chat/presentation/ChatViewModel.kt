@@ -82,6 +82,7 @@ class ChatViewModel @Inject constructor(
                     nickname = profile.nickname,
                     avatarType = profile.avatarType,
                     avatarPresetId = profile.avatarPresetId,
+                    avatarUrl = profile.avatarUrl,
                     content = text
                 )
             )

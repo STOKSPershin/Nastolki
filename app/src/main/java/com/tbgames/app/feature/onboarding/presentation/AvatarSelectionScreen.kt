@@ -43,11 +43,34 @@ fun AvatarSelectionScreen(
     error: String?,
     onDone: () -> Unit
 ) {
+    val cropImageLauncher = rememberLauncherForActivityResult(
+        contract = com.canhub.cropper.CropImageContract()
+    ) { result ->
+        if (result.isSuccessful) {
+            val uriContent = result.uriContent
+            if (uriContent != null) {
+                onCustomAvatarSelected(uriContent)
+            }
+        }
+    }
+
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         if (uri != null) {
-            onCustomAvatarSelected(uri)
+            val cropOptions = com.canhub.cropper.CropImageContractOptions(
+                uri = uri,
+                cropImageOptions = com.canhub.cropper.CropImageOptions(
+                    aspectRatioX = 1,
+                    aspectRatioY = 1,
+                    fixAspectRatio = true,
+                    initialCropWindowPaddingRatio = 0f,
+                    autoZoomEnabled = false,
+                    scaleType = com.canhub.cropper.CropImageView.ScaleType.FIT_CENTER,
+                    cropShape = com.canhub.cropper.CropImageView.CropShape.OVAL
+                )
+            )
+            cropImageLauncher.launch(cropOptions)
         }
     }
 

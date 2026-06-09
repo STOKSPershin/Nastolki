@@ -168,7 +168,7 @@ private fun ChatBubble(
             AvatarCircle(
                 avatarType = message.avatarType,
                 avatarPresetId = message.avatarPresetId,
-                avatarUrl = null,
+                avatarUrl = message.avatarUrl,
                 size = 32.dp,
                 isOnline = true
             )
