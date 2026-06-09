@@ -101,7 +101,53 @@ fun GameRoomScreen(
             TopAppBar(
                 title = {
                     val isPlaying = state.roomStatus == "playing" || state.roomStatus == "game_over"
-                    if (!isPlaying) {
+                    if (isPlaying) {
+                        if (state.gameInfo.id == "password" && state.gameState != null) {
+                            val passwordGameState = try {
+                                kotlinx.serialization.json.Json.decodeFromJsonElement(
+                                    com.tbgames.app.feature.gameroom.domain.model.PasswordGameState.serializer(),
+                                    state.gameState
+                                )
+                            } catch (e: Exception) { null }
+                            
+                            val currentPair = passwordGameState?.let { pgs ->
+                                pgs.pairs.getOrNull(pgs.currentRoundIndex)
+                            }
+                            val role = when (state.currentUserId) {
+                                currentPair?.thinkerId -> "Загадывающий"
+                                currentPair?.guesserId -> "Отгадывающий"
+                                else -> "Подсказывающий"
+                            }
+                            Text(
+                                text = "Роль: $role",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                        } else if (state.gameInfo.id == "fake_artist" && state.gameState != null) {
+                            val fakeArtistGameState = try {
+                                kotlinx.serialization.json.Json.decodeFromJsonElement(
+                                    com.tbgames.app.feature.gameroom.domain.model.FakeArtistGameState.serializer(),
+                                    state.gameState
+                                )
+                            } catch (e: Exception) { null }
+
+                            if (fakeArtistGameState != null) {
+                                Column {
+                                    Text(
+                                        text = "Категория:",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = fakeArtistGameState.category,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
+                    } else {
                         Column {
                             Text(
                                 text = "${state.gameInfo.emoji} ${state.gameInfo.name}",

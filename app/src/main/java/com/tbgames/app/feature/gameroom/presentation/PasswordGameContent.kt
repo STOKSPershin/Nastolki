@@ -69,9 +69,9 @@ fun PasswordGameContent(
             .padding(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Role & Round Header
+        // Round Header
         Text(
-            text = "Роль: $role  •  Раунд ${gameState.currentRoundIndex + 1} из ${gameState.pairs.size}",
+            text = "Раунд ${gameState.currentRoundIndex + 1} из ${gameState.pairs.size}",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary
