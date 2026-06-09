@@ -3,6 +3,7 @@ package com.tbgames.app.navigation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -24,6 +25,7 @@ object Routes {
     const val SPLASH = "splash"
     const val NICKNAME = "nickname"
     const val AVATAR = "avatar"
+    const val ACCOUNT_SELECTION = "account_selection"
     const val LOBBY = "lobby"
     const val PROFILE = "profile"
     const val CHAT = "chat"
@@ -44,6 +46,9 @@ fun TBGamesNavGraph(
         startDestination = Routes.SPLASH
     ) {
         composable(Routes.SPLASH) {
+            LaunchedEffect(Unit) {
+                onboardingViewModel.recheckLoginStatus()
+            }
             SplashScreen(
                 onNavigateToOnboarding = {
                     navController.navigate(Routes.NICKNAME) {
@@ -55,8 +60,37 @@ fun TBGamesNavGraph(
                         popUpTo(Routes.SPLASH) { inclusive = true }
                     }
                 },
-                isLoggedIn = onboardingState.isLoggedIn
+                onNavigateToAccountSelection = {
+                    navController.navigate(Routes.ACCOUNT_SELECTION) {
+                        popUpTo(Routes.SPLASH) { inclusive = true }
+                    }
+                },
+                isLoggedIn = onboardingState.isLoggedIn,
+                hasSavedAccounts = onboardingState.hasSavedAccounts
             )
+        }
+
+        composable(Routes.ACCOUNT_SELECTION) {
+            com.tbgames.app.feature.onboarding.presentation.AccountSelectionScreen(
+                accounts = onboardingState.savedAccounts,
+                isLoading = onboardingState.isLoading,
+                error = onboardingState.error,
+                onAccountClick = onboardingViewModel::restoreAccount,
+                onCreateNewAccountClick = {
+                    onboardingViewModel.startNewAccountCreation()
+                    navController.navigate(Routes.NICKNAME)
+                },
+                onDeleteAccountClick = onboardingViewModel::deleteSavedAccount
+            )
+
+            // Navigate to lobby when account is restored
+            if (onboardingState.isLoggedIn == true) {
+                LaunchedEffect(Unit) {
+                    navController.navigate(Routes.LOBBY) {
+                        popUpTo(Routes.ACCOUNT_SELECTION) { inclusive = true }
+                    }
+                }
+            }
         }
 
         composable(Routes.NICKNAME) {
@@ -97,6 +131,19 @@ fun TBGamesNavGraph(
         composable(Routes.LOBBY) {
             val lobbyViewModel: LobbyViewModel = hiltViewModel()
             val lobbyState by lobbyViewModel.uiState.collectAsState()
+            val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+
+            androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+                val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                    if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                        lobbyViewModel.loadProfile()
+                    }
+                }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose {
+                    lifecycleOwner.lifecycle.removeObserver(observer)
+                }
+            }
 
             // State-based navigation after room creation
             lobbyState.navigateToRoomId?.let { roomId ->
@@ -126,9 +173,11 @@ fun TBGamesNavGraph(
             val profileState by profileViewModel.uiState.collectAsState()
 
             // Handle logout navigation
-            if (profileState.loggedOut) {
-                navController.navigate(Routes.SPLASH) {
-                    popUpTo(0) { inclusive = true }
+            LaunchedEffect(profileState.loggedOut) {
+                if (profileState.loggedOut) {
+                    navController.navigate(Routes.SPLASH) {
+                        popUpTo(0) { inclusive = true }
+                    }
                 }
             }
 

@@ -44,6 +44,7 @@ class ProfileViewModel @Inject constructor(
     private val preferencesManager: PreferencesManager,
     private val localProfileStorage: LocalProfileStorage,
     private val avatarStorageRepository: AvatarStorageRepository,
+    private val localAccountStorage: com.tbgames.app.feature.onboarding.data.LocalAccountStorage,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -209,21 +210,32 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(showLogoutDialog = false, isLoading = true) }
 
-            // Delete profile from DB
-            val userId = authRepository.getCurrentUserId()
-            if (userId != null) {
-                profileRepository.deleteProfile(userId)
-            }
+            // Save the current account to LocalAccountStorage so we can restore it later
+            val profile = localProfileStorage.getProfile()
+            val accessToken = authRepository.getCurrentAccessToken()
+            val refreshToken = authRepository.getCurrentRefreshToken()
 
-            // Also delete by device_id to be thorough
-            val deviceId = localProfileStorage.getDeviceId()
-            profileRepository.deleteProfileByDeviceId(deviceId)
+            if (profile != null && accessToken != null && refreshToken != null) {
+                localAccountStorage.saveAccount(
+                    com.tbgames.app.feature.onboarding.data.SavedAccount(
+                        userId = profile.id,
+                        nickname = profile.nickname,
+                        avatarType = profile.avatarType,
+                        avatarPresetId = profile.avatarPresetId,
+                        avatarUrl = profile.avatarUrl,
+                        accessToken = accessToken,
+                        refreshToken = refreshToken
+                    )
+                )
+            }
 
             // Clear local storage (keeps device UUID)
             localProfileStorage.clear()
+            
+            localAccountStorage.clearActiveAccount()
 
-            // Sign out from Supabase
-            authRepository.signOut()
+            // Just clear local session, do NOT sign out from Supabase (to keep the session alive on server)
+            authRepository.clearLocalSession()
 
             _uiState.update { it.copy(isLoading = false, loggedOut = true) }
         }

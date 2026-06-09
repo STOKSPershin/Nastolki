@@ -21,6 +21,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import com.tbgames.app.feature.profile.data.AvatarStorageRepository
 import com.tbgames.app.core.utils.ImageHelper
 
+import com.tbgames.app.feature.onboarding.data.LocalAccountStorage
+import com.tbgames.app.feature.onboarding.data.SavedAccount
+
 data class OnboardingUiState(
     val nickname: String = "",
     val nicknameError: String? = null,
@@ -28,6 +31,8 @@ data class OnboardingUiState(
     val customAvatarUri: Uri? = null,
     val isLoading: Boolean = false,
     val isLoggedIn: Boolean? = null,
+    val hasSavedAccounts: Boolean? = null,
+    val savedAccounts: List<SavedAccount> = emptyList(),
     val isProfileCreated: Boolean = false,
     val error: String? = null
 )
@@ -38,6 +43,7 @@ class OnboardingViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
     private val localProfileStorage: LocalProfileStorage,
     private val avatarStorageRepository: AvatarStorageRepository,
+    private val localAccountStorage: LocalAccountStorage,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -48,89 +54,164 @@ class OnboardingViewModel @Inject constructor(
         checkLoginStatus()
     }
 
+    fun recheckLoginStatus() {
+        // Reset state before checking to avoid stale data triggering navigation
+        _uiState.update { 
+            it.copy(
+                isLoggedIn = null, 
+                hasSavedAccounts = null,
+                isLoading = true 
+            ) 
+        }
+        checkLoginStatus()
+    }
+
     private fun checkLoginStatus() {
         viewModelScope.launch {
-            val deviceId = localProfileStorage.getDeviceId()
-
             // Step 1: Check if Supabase session is alive and profile exists
-            val loggedIn = authRepository.isLoggedIn()
+            var loggedIn = authRepository.isLoggedIn()
+            
+            // If not logged in, but we have an active account, try to restore it implicitly!
+            if (!loggedIn) {
+                val activeAccountId = localAccountStorage.getActiveAccountId()
+                if (activeAccountId != null) {
+                    val savedAccounts = localAccountStorage.getSavedAccounts()
+                    val activeAccount = savedAccounts.find { it.userId == activeAccountId }
+                    if (activeAccount != null) {
+                        val restoreResult = authRepository.restoreSession(activeAccount.accessToken, activeAccount.refreshToken)
+                        if (restoreResult is AppResult.Success) {
+                            loggedIn = true
+                        }
+                    }
+                }
+            }
+
             if (loggedIn) {
                 val userId = authRepository.getCurrentUserId()
                 if (userId != null) {
                     when (val result = profileRepository.getProfile(userId)) {
                         is AppResult.Success -> {
-                            // Session valid, profile exists — save locally and go
+                            // Session valid, profile exists -> save locally and go
                             localProfileStorage.saveProfile(result.data)
+                            localAccountStorage.setActiveAccountId(userId)
                             _uiState.update { it.copy(isLoggedIn = true) }
                             return@launch
                         }
                         is AppResult.Error -> {
-                            // Session exists but profile gone — fall through
+                            // Session exists but profile gone -> fall through
                         }
                     }
                 }
             }
 
-            // Step 2: No valid session — check if this device had a profile before
-            // Sign in anonymously to get a new auth user
-            val authResult = authRepository.signInAnonymously()
-            if (authResult is AppResult.Error) {
-                _uiState.update { it.copy(isLoggedIn = false) }
+            // Step 2: Session invalid or profile missing. Check for saved accounts.
+            val savedAccounts = localAccountStorage.getSavedAccounts()
+            if (savedAccounts.isNotEmpty()) {
+                _uiState.update { 
+                    it.copy(
+                        isLoggedIn = false, 
+                        hasSavedAccounts = true,
+                        savedAccounts = savedAccounts,
+                        isLoading = false
+                    ) 
+                }
                 return@launch
             }
-            val newUserId = (authResult as AppResult.Success).data.id
 
-            // Look up existing profile by device_id
+            // Step 3: No saved accounts and no session. This might be an existing user from before the multi-account update!
+            // Let's try to recover their old profile using deviceId.
+            val deviceId = localProfileStorage.getDeviceId()
             when (val deviceResult = profileRepository.getProfileByDeviceId(deviceId)) {
                 is AppResult.Success -> {
                     val existingProfile = deviceResult.data
                     if (existingProfile != null) {
-                        // Device had a profile — delete old row, create new one with new user_id
-                        profileRepository.deleteProfileByDeviceId(deviceId)
-
-                        val restoredProfile = existingProfile.copy(
-                            id = newUserId,
-                            deviceId = deviceId
-                        )
-                        when (profileRepository.createProfile(restoredProfile)) {
+                        // We found an orphaned profile! Let's sign in anonymously and migrate it.
+                        when (val authResult = authRepository.signInAnonymously()) {
                             is AppResult.Success -> {
-                                localProfileStorage.saveProfile(restoredProfile)
-                                _uiState.update { it.copy(isLoggedIn = true) }
-                                return@launch
+                                val newUserId = authResult.data.id
+                                val newAccessToken = authRepository.getCurrentAccessToken()
+                                val newRefreshToken = authRepository.getCurrentRefreshToken()
+
+                                // Delete the old profile row because we're moving it to a new auth user
+                                profileRepository.deleteProfileByDeviceId(deviceId)
+
+                                val restoredProfile = existingProfile.copy(
+                                    id = newUserId,
+                                    deviceId = java.util.UUID.randomUUID().toString() // Give it a new random deviceId to free up the physical deviceId
+                                )
+
+                                if (profileRepository.createProfile(restoredProfile) is AppResult.Success) {
+                                    // Save to our new LocalAccountStorage
+                                    if (newAccessToken != null && newRefreshToken != null) {
+                                        localAccountStorage.saveAccount(
+                                            com.tbgames.app.feature.onboarding.data.SavedAccount(
+                                                userId = restoredProfile.id,
+                                                nickname = restoredProfile.nickname,
+                                                avatarType = restoredProfile.avatarType,
+                                                avatarPresetId = restoredProfile.avatarPresetId,
+                                                avatarUrl = restoredProfile.avatarUrl,
+                                                accessToken = newAccessToken,
+                                                refreshToken = newRefreshToken
+                                            )
+                                        )
+                                    }
+                                    localProfileStorage.saveProfile(restoredProfile)
+                                    _uiState.update { it.copy(isLoggedIn = true) }
+                                    return@launch
+                                }
                             }
-                            is AppResult.Error -> {
-                                // Failed to recreate — show onboarding
-                            }
+                            is AppResult.Error -> {}
                         }
                     }
                 }
-                is AppResult.Error -> {
-                    // Can't check — fall through
-                }
+                is AppResult.Error -> {}
             }
 
-            // Step 3: Also check local storage as last resort
-            val localProfile = localProfileStorage.getProfile()
-            if (localProfile != null) {
-                profileRepository.deleteProfileByDeviceId(deviceId)
-
-                val restoredProfile = localProfile.copy(
-                    id = newUserId,
-                    deviceId = deviceId
-                )
-                when (profileRepository.createProfile(restoredProfile)) {
-                    is AppResult.Success -> {
-                        localProfileStorage.saveProfile(restoredProfile)
-                        _uiState.update { it.copy(isLoggedIn = true) }
-                        return@launch
-                    }
-                    is AppResult.Error -> { /* fall through */ }
-                }
+            // Step 4: Nothing found. Show onboarding.
+            _uiState.update { 
+                it.copy(
+                    isLoggedIn = false, 
+                    hasSavedAccounts = false 
+                ) 
             }
-
-            // Step 4: No profile anywhere — show onboarding
-            _uiState.update { it.copy(isLoggedIn = false) }
         }
+    }
+
+    fun deleteSavedAccount(account: SavedAccount) {
+        localAccountStorage.removeAccount(account.userId)
+        val savedAccounts = localAccountStorage.getSavedAccounts()
+        _uiState.update { 
+            it.copy(
+                savedAccounts = savedAccounts,
+                hasSavedAccounts = savedAccounts.isNotEmpty()
+            ) 
+        }
+    }
+
+    fun restoreAccount(account: SavedAccount) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            val restoreResult = authRepository.restoreSession(account.accessToken, account.refreshToken)
+            if (restoreResult is AppResult.Success) {
+                // Fetch profile to make sure it exists
+                when (val profileResult = profileRepository.getProfile(account.userId)) {
+                    is AppResult.Success -> {
+                        localAccountStorage.setActiveAccountId(account.userId)
+                        localProfileStorage.saveProfile(profileResult.data)
+                        _uiState.update { it.copy(isLoading = false, isLoggedIn = true) }
+                    }
+                    is AppResult.Error -> {
+                        _uiState.update { it.copy(isLoading = false, error = "Профиль не найден") }
+                    }
+                }
+            } else {
+                _uiState.update { it.copy(isLoading = false, error = "Не удалось восстановить сессию") }
+            }
+        }
+    }
+
+    fun startNewAccountCreation() {
+        _uiState.update { it.copy(hasSavedAccounts = false) }
     }
 
     fun onNicknameChange(value: String) {
@@ -221,11 +302,27 @@ class OnboardingViewModel @Inject constructor(
                 avatarType = finalAvatarType,
                 avatarPresetId = _uiState.value.selectedPresetId,
                 avatarUrl = avatarUrl,
-                deviceId = deviceId
+                deviceId = java.util.UUID.randomUUID().toString()
             )
 
             when (profileRepository.createProfile(profile)) {
                 is AppResult.Success -> {
+                    val accessToken = authRepository.getCurrentAccessToken()
+                    val refreshToken = authRepository.getCurrentRefreshToken()
+                    if (accessToken != null && refreshToken != null) {
+                        localAccountStorage.saveAccount(
+                            com.tbgames.app.feature.onboarding.data.SavedAccount(
+                                userId = profile.id,
+                                nickname = profile.nickname,
+                                avatarType = profile.avatarType,
+                                avatarPresetId = profile.avatarPresetId,
+                                avatarUrl = profile.avatarUrl,
+                                accessToken = accessToken,
+                                refreshToken = refreshToken
+                            )
+                        )
+                        localAccountStorage.setActiveAccountId(profile.id)
+                    }
                     localProfileStorage.saveProfile(profile)
                     _uiState.update { it.copy(isLoading = false, isProfileCreated = true) }
                 }

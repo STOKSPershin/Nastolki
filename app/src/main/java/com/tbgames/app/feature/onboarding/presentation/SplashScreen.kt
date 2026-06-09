@@ -35,7 +35,9 @@ import kotlinx.coroutines.delay
 fun SplashScreen(
     onNavigateToOnboarding: () -> Unit,
     onNavigateToLobby: () -> Unit,
-    isLoggedIn: Boolean?
+    onNavigateToAccountSelection: () -> Unit,
+    isLoggedIn: Boolean?,
+    hasSavedAccounts: Boolean?
 ) {
     var startAnimation by remember { mutableStateOf(false) }
     var progress by remember { mutableStateOf(0f) }
@@ -48,20 +50,30 @@ fun SplashScreen(
 
     val progressAnim by animateFloatAsState(
         targetValue = progress,
-        animationSpec = tween(durationMillis = 1500),
-        label = "splash_progress"
+        animationSpec = tween(durationMillis = 200),
+        label = "progress_alpha"
     )
 
-    LaunchedEffect(key1 = true) {
+    LaunchedEffect(isLoggedIn, hasSavedAccounts) {
         startAnimation = true
-        progress = 1f
-        delay(1500)
-    }
+        
+        // Start progress animation
+        while(progress < 0.9f && isLoggedIn == null) {
+            delay(100)
+            progress += 0.1f
+        }
 
-    LaunchedEffect(key1 = isLoggedIn) {
-        if (isLoggedIn != null) {
-            delay(1500)
-            if (isLoggedIn) onNavigateToLobby() else onNavigateToOnboarding()
+        // Wait for login status resolution
+        if (isLoggedIn == true || (isLoggedIn == false && hasSavedAccounts != null)) {
+            progress = 1f
+            delay(500) // Small delay so user sees full progress bar
+            if (isLoggedIn == true) {
+                onNavigateToLobby()
+            } else if (hasSavedAccounts == true) {
+                onNavigateToAccountSelection()
+            } else {
+                onNavigateToOnboarding()
+            }
         }
     }
 

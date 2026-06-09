@@ -49,7 +49,7 @@ class LobbyViewModel @Inject constructor(
         loadRooms()
     }
 
-    private fun loadProfile() {
+    fun loadProfile() {
         viewModelScope.launch {
             val userId = authRepository.getCurrentUserId() ?: return@launch
             when (val result = profileRepository.getProfile(userId)) {

@@ -29,6 +29,22 @@ class AuthRepository @Inject constructor(
         return supabase.auth.currentUserOrNull()?.id
     }
 
+    fun getCurrentAccessToken(): String? {
+        return supabase.auth.currentSessionOrNull()?.accessToken
+    }
+
+    fun getCurrentRefreshToken(): String? {
+        return supabase.auth.currentSessionOrNull()?.refreshToken
+    }
+
+    suspend fun restoreSession(accessToken: String, refreshToken: String): AppResult<Unit> = safeCall {
+        supabase.auth.importAuthToken(accessToken, refreshToken)
+    }
+
+    suspend fun clearLocalSession() {
+        supabase.auth.clearSession()
+    }
+
     suspend fun signOut() {
         try {
             supabase.auth.signOut()

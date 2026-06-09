@@ -323,7 +323,7 @@ fun ProfileSettingsScreen(
             onDismissRequest = onHideLogoutDialog,
             title = { Text("Выйти из аккаунта?") },
             text = {
-                Text("Ваш профиль будет удалён. Вы сможете создать новый профиль при следующем входе.")
+                Text("Вы уверены, что хотите выйти? Вы сможете снова войти в этот аккаунт на экране выбора.")
             },
             confirmButton = {
                 TextButton(onClick = onLogout) {
