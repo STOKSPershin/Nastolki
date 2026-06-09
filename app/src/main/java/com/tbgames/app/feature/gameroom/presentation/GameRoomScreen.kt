@@ -100,32 +100,9 @@ fun GameRoomScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        val isFakeArtistPlaying = state.roomStatus == "playing" && state.gameInfo.id == "fake_artist" && state.gameState != null
-                        if (isFakeArtistPlaying) {
-                            val fakeArtistGameState = try {
-                                kotlinx.serialization.json.Json.decodeFromJsonElement(
-                                    com.tbgames.app.feature.gameroom.domain.model.FakeArtistGameState.serializer(),
-                                    state.gameState!!
-                                )
-                            } catch (e: Exception) { null }
-
-                            if (fakeArtistGameState != null) {
-                                Text(
-                                    text = "Категория:",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = fakeArtistGameState.category,
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            } else {
-                                Text(text = "${state.gameInfo.emoji} ${state.gameInfo.name}", fontWeight = FontWeight.Bold)
-                            }
-                        } else {
+                    val isPlaying = state.roomStatus == "playing" || state.roomStatus == "game_over"
+                    if (!isPlaying) {
+                        Column {
                             Text(
                                 text = "${state.gameInfo.emoji} ${state.gameInfo.name}",
                                 style = MaterialTheme.typography.titleMedium,
@@ -155,8 +132,11 @@ fun GameRoomScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onToggleRules) {
-                        Icon(Icons.Default.Info, contentDescription = "Правила")
+                    val isPlaying = state.roomStatus == "playing" || state.roomStatus == "game_over"
+                    if (!isPlaying) {
+                        IconButton(onClick = onToggleRules) {
+                            Icon(Icons.Default.Info, contentDescription = "Правила")
+                        }
                     }
                 }
             )

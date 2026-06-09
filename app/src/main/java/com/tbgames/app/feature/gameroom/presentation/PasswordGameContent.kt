@@ -66,27 +66,18 @@ fun PasswordGameContent(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
+            .padding(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Role Header
+        // Role & Round Header
         Text(
-            text = "Роль: $role",
-            style = MaterialTheme.typography.titleLarge,
+            text = "Роль: $role  •  Раунд ${gameState.currentRoundIndex + 1} из ${gameState.pairs.size}",
+            style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary
         )
         
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        // Round Info
-        Text(
-            text = "Раунд ${gameState.currentRoundIndex + 1} из ${gameState.pairs.size}",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold
-        )
-        
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(10.dp))
         
         // Statistics Table
         Card(
@@ -94,9 +85,9 @@ fun PasswordGameContent(
             shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
         ) {
-            Column(modifier = Modifier.padding(12.dp)) {
+            Column(modifier = Modifier.padding(10.dp)) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("Игрок", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
@@ -112,7 +103,7 @@ fun PasswordGameContent(
                     }
                     val score = gameState.scores[p.profile.id] ?: 0
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(p.profile.nickname, modifier = Modifier.weight(1f), maxLines = 1)
@@ -123,14 +114,14 @@ fun PasswordGameContent(
             }
         }
         
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
         
         if (gameState.status == "input_word") {
             if (role == "Загадывающий") {
                 var inputWord by remember { mutableStateOf("") }
                 
-                Text("Придумайте слово-пароль:", style = MaterialTheme.typography.bodyLarge)
-                Spacer(modifier = Modifier.height(8.dp))
+                Text("Придумайте слово-пароль:", style = MaterialTheme.typography.bodyMedium)
+                Spacer(modifier = Modifier.height(6.dp))
                 OutlinedTextField(
                     value = inputWord,
                     onValueChange = { inputWord = it },
@@ -138,7 +129,7 @@ fun PasswordGameContent(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 Button(
                     onClick = { if (inputWord.isNotBlank()) onSubmitWord(inputWord.trim()) },
                     modifier = Modifier.fillMaxWidth(),
@@ -154,7 +145,7 @@ fun PasswordGameContent(
                 )
             }
             
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = "Осталось времени: $timeRemaining сек",
                 style = MaterialTheme.typography.titleMedium,
@@ -172,13 +163,13 @@ fun PasswordGameContent(
                 // Word Spoiler
                 var isWordVisible by remember { mutableStateOf(false) }
                 
-                Text("Загаданное слово:", style = MaterialTheme.typography.bodyLarge)
-                Spacer(modifier = Modifier.height(8.dp))
+                Text("Загаданное слово:", style = MaterialTheme.typography.bodyMedium)
+                Spacer(modifier = Modifier.height(4.dp))
                 
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(60.dp)
+                        .height(50.dp)
                         .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(12.dp))
                         .pointerInput(Unit) {
                             detectTapGestures(
@@ -194,7 +185,7 @@ fun PasswordGameContent(
                     if (isWordVisible) {
                         Text(
                             text = gameState.word ?: "",
-                            style = MaterialTheme.typography.headlineSmall,
+                            style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
@@ -208,9 +199,9 @@ fun PasswordGameContent(
                 }
                 
                 if (role == "Загадывающий") {
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Text("Начисление баллов:", style = MaterialTheme.typography.titleMedium)
                     Spacer(modifier = Modifier.height(16.dp))
+                    Text("Начисление баллов:", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
                     
                     var useDropdown by remember { mutableStateOf(false) }
                     var pointsCounter by remember { mutableStateOf(0) }
@@ -224,13 +215,13 @@ fun PasswordGameContent(
                         Text("Список")
                     }
                     
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     
                     if (useDropdown) {
                         Box {
                             OutlinedButton(
                                 onClick = { expanded = true },
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth().height(45.dp)
                             ) {
                                 Text("Выбрано баллов: $pointsCounter")
                                 Icon(Icons.Default.ArrowDropDown, contentDescription = null)
@@ -252,7 +243,7 @@ fun PasswordGameContent(
                         ) {
                             IconButton(
                                 onClick = { if (pointsCounter > 0) pointsCounter-- },
-                                modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+                                modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp)).size(40.dp)
                             ) {
                                 Icon(Icons.Default.Remove, contentDescription = "Меньше")
                             }
@@ -265,17 +256,17 @@ fun PasswordGameContent(
                             Spacer(modifier = Modifier.width(24.dp))
                             IconButton(
                                 onClick = { pointsCounter++ },
-                                modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+                                modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp)).size(40.dp)
                             ) {
                                 Icon(Icons.Default.Add, contentDescription = "Больше")
                             }
                         }
                     }
                     
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
                     Button(
                         onClick = { onAwardPoints(pointsCounter) },
-                        modifier = Modifier.fillMaxWidth().height(50.dp)
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
                     ) {
                         Text("Начислить $pointsCounter баллов", fontWeight = FontWeight.Bold)
                     }
