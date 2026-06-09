@@ -224,10 +224,13 @@ fun TBGamesNavGraph(
                 onLeaveRoom = gameRoomViewModel::leaveRoom,
                 onSettingsChange = gameRoomViewModel::updateSettings,
                 onStartReadyCheck = gameRoomViewModel::startReadyCheck,
+                onCancelReadyCheck = gameRoomViewModel::cancelReadyCheck,
                 onToggleReady = gameRoomViewModel::toggleReady,
                 onStartGame = gameRoomViewModel::startGame,
                 onRoundResult = gameRoomViewModel::handleRoundResult,
-                onUpdateGameState = gameRoomViewModel::updateGameState
+                onUpdateGameState = gameRoomViewModel::updateGameState,
+                onSubmitPasswordWord = gameRoomViewModel::submitPasswordWord,
+                onAwardPasswordPoints = gameRoomViewModel::awardPasswordPoints
             )
         }
     }

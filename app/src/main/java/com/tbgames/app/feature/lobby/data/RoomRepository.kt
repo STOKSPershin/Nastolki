@@ -26,9 +26,13 @@ class RoomRepository @Inject constructor(
     }
 
     suspend fun joinRoom(roomId: String, playerId: String, isHost: Boolean = false): AppResult<Unit> = safeCall {
-        supabase.postgrest["room_players"].insert(
-            RoomPlayer(roomId = roomId, playerId = playerId, isHost = isHost)
-        )
+        try {
+            supabase.postgrest["room_players"].insert(
+                RoomPlayer(roomId = roomId, playerId = playerId, isHost = isHost)
+            )
+        } catch (e: Exception) {
+            // Might be duplicate key, ignore and proceed
+        }
         // Update current_players count
         val players = supabase.postgrest["room_players"]
             .select { filter { eq("room_id", roomId) } }
@@ -56,6 +60,12 @@ class RoomRepository @Inject constructor(
             supabase.postgrest["rooms"].update(
                 mapOf("current_players" to remaining.size)
             ) { filter { eq("id", roomId) } }
+        }
+    }
+
+    suspend fun deleteRoom(roomId: String): AppResult<Unit> = safeCall {
+        supabase.postgrest["rooms"].delete {
+            filter { eq("id", roomId) }
         }
     }
 

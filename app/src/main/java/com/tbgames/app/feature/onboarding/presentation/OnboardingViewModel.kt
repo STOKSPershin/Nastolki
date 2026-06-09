@@ -94,7 +94,7 @@ class OnboardingViewModel @Inject constructor(
                             // Session valid, profile exists -> save locally and go
                             localProfileStorage.saveProfile(result.data)
                             localAccountStorage.setActiveAccountId(userId)
-                            _uiState.update { it.copy(isLoggedIn = true) }
+                            _uiState.update { it.copy(isLoggedIn = true, isLoading = false) }
                             return@launch
                         }
                         is AppResult.Error -> {
@@ -156,7 +156,7 @@ class OnboardingViewModel @Inject constructor(
                                         )
                                     }
                                     localProfileStorage.saveProfile(restoredProfile)
-                                    _uiState.update { it.copy(isLoggedIn = true) }
+                                    _uiState.update { it.copy(isLoggedIn = true, isLoading = false) }
                                     return@launch
                                 }
                             }
@@ -167,11 +167,51 @@ class OnboardingViewModel @Inject constructor(
                 is AppResult.Error -> {}
             }
 
+            // Step 3.5: No server profile found by deviceId, but we might still have a local profile in local storage.
+            // Let's try to recover it as a last resort.
+            val localProfile = localProfileStorage.getProfile()
+            if (localProfile != null) {
+                when (val authResult = authRepository.signInAnonymously()) {
+                    is AppResult.Success -> {
+                        val newUserId = authResult.data.id
+                        val newAccessToken = authRepository.getCurrentAccessToken()
+                        val newRefreshToken = authRepository.getCurrentRefreshToken()
+
+                        val restoredProfile = localProfile.copy(
+                            id = newUserId,
+                            deviceId = java.util.UUID.randomUUID().toString()
+                        )
+
+                        if (profileRepository.createProfile(restoredProfile) is AppResult.Success) {
+                            if (newAccessToken != null && newRefreshToken != null) {
+                                localAccountStorage.saveAccount(
+                                    com.tbgames.app.feature.onboarding.data.SavedAccount(
+                                        userId = restoredProfile.id,
+                                        nickname = restoredProfile.nickname,
+                                        avatarType = restoredProfile.avatarType,
+                                        avatarPresetId = restoredProfile.avatarPresetId,
+                                        avatarUrl = restoredProfile.avatarUrl,
+                                        accessToken = newAccessToken,
+                                        refreshToken = newRefreshToken
+                                    )
+                                )
+                                localAccountStorage.setActiveAccountId(restoredProfile.id)
+                            }
+                            localProfileStorage.saveProfile(restoredProfile)
+                            _uiState.update { it.copy(isLoggedIn = true, isLoading = false) }
+                            return@launch
+                        }
+                    }
+                    is AppResult.Error -> {}
+                }
+            }
+
             // Step 4: Nothing found. Show onboarding.
             _uiState.update { 
                 it.copy(
                     isLoggedIn = false, 
-                    hasSavedAccounts = false 
+                    hasSavedAccounts = false,
+                    isLoading = false
                 ) 
             }
         }
@@ -211,7 +251,7 @@ class OnboardingViewModel @Inject constructor(
     }
 
     fun startNewAccountCreation() {
-        _uiState.update { it.copy(hasSavedAccounts = false) }
+        _uiState.update { it.copy(hasSavedAccounts = false, isLoading = false) }
     }
 
     fun onNicknameChange(value: String) {

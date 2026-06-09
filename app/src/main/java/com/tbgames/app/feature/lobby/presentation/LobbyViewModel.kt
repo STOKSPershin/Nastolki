@@ -147,8 +147,15 @@ class LobbyViewModel @Inject constructor(
     fun joinRoom(roomId: String) {
         val profile = _uiState.value.currentProfile ?: return
         viewModelScope.launch {
-            roomRepository.joinRoom(roomId, profile.id)
-            loadRooms()
+            when (val result = roomRepository.joinRoom(roomId, profile.id)) {
+                is AppResult.Success -> {
+                    loadRooms()
+                    _uiState.update { it.copy(navigateToRoomId = roomId) }
+                }
+                is AppResult.Error -> {
+                    _uiState.update { it.copy(error = "Не удалось войти в комнату: ${result.message}") }
+                }
+            }
         }
     }
 

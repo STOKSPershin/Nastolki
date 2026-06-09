@@ -39,6 +39,7 @@ class AuthRepository @Inject constructor(
 
     suspend fun restoreSession(accessToken: String, refreshToken: String): AppResult<Unit> = safeCall {
         supabase.auth.importAuthToken(accessToken, refreshToken)
+        supabase.auth.retrieveUserForCurrentSession(updateSession = true)
     }
 
     suspend fun clearLocalSession() {

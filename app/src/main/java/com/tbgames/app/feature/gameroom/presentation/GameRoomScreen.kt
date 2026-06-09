@@ -67,24 +67,29 @@ fun GameRoomScreen(
     onLeaveRoom: () -> Unit,
     onSettingsChange: (com.tbgames.app.core.domain.model.RoomSettings) -> Unit,
     onStartReadyCheck: () -> Unit,
+    onCancelReadyCheck: () -> Unit,
     onToggleReady: (Boolean) -> Unit,
     onStartGame: () -> Unit,
     onRoundResult: (Int) -> Unit,
-    onUpdateGameState: (com.tbgames.app.feature.gameroom.domain.model.FakeArtistGameState, String?) -> Unit
+    onUpdateGameState: (com.tbgames.app.feature.gameroom.domain.model.FakeArtistGameState, String?) -> Unit,
+    onSubmitPasswordWord: (String) -> Unit,
+    onAwardPasswordPoints: (Int) -> Unit
 ) {
     var showLeaveDialog by remember { mutableStateOf(false) }
+    var isLeaving by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
 
     LaunchedEffect(state.isRoomClosed) {
-        if (state.isRoomClosed) {
-            android.widget.Toast.makeText(context, "Создатель комнаты покинул игру", android.widget.Toast.LENGTH_SHORT).show()
+        if (state.isRoomClosed && !isLeaving) {
+            isLeaving = true
+            android.widget.Toast.makeText(context, "Создатель покинул комнату", android.widget.Toast.LENGTH_SHORT).show()
             onLeaveRoom()
             onBackClick()
         }
     }
 
     LaunchedEffect(state.roomStatus, state.players) {
-        if (state.isCurrentUserHost && state.roomStatus == "ready_check" && state.players.isNotEmpty()) {
+        if (state.isCurrentUserHost && state.roomStatus == "ready_check" && state.players.size >= 3) {
             if (state.players.all { it.isReady }) {
                 onStartGame()
             }
@@ -136,11 +141,14 @@ fun GameRoomScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = {
-                        if (state.isCurrentUserHost) {
-                            showLeaveDialog = true
-                        } else {
-                            onLeaveRoom()
-                            onBackClick()
+                        if (!isLeaving) {
+                            if (state.isCurrentUserHost) {
+                                showLeaveDialog = true
+                            } else {
+                                isLeaving = true
+                                onLeaveRoom()
+                                onBackClick()
+                            }
                         }
                     }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
@@ -174,11 +182,14 @@ fun GameRoomScreen(
                     Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
                         if (state.roomStatus == "game_over") {
                             com.tbgames.app.feature.gameroom.presentation.GameOverScreen(
-                                gameState = fakeArtistGameState,
+                                scores = fakeArtistGameState.scores,
                                 players = state.players,
                                 onExit = {
-                                    onLeaveRoom()
-                                    onBackClick()
+                                    if (!isLeaving) {
+                                        isLeaving = true
+                                        onLeaveRoom()
+                                        onBackClick()
+                                    }
                                 }
                             )
                         } else {
@@ -190,6 +201,40 @@ fun GameRoomScreen(
                                 isHost = state.isCurrentUserHost,
                                 onRoundResult = onRoundResult,
                                 onUpdateState = onUpdateGameState
+                            )
+                        }
+                    }
+                }
+            } else if ((state.roomStatus == "playing" || state.roomStatus == "game_over") && state.gameInfo.id == "password" && state.gameState != null) {
+                val passwordGameState = try {
+                    kotlinx.serialization.json.Json.decodeFromJsonElement(
+                        com.tbgames.app.feature.gameroom.domain.model.PasswordGameState.serializer(),
+                        state.gameState
+                    )
+                } catch (e: Exception) { null }
+
+                if (passwordGameState != null) {
+                    Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+                        if (state.roomStatus == "game_over") {
+                            com.tbgames.app.feature.gameroom.presentation.GameOverScreen(
+                                scores = passwordGameState.scores,
+                                players = state.players,
+                                onExit = {
+                                    if (!isLeaving) {
+                                        isLeaving = true
+                                        onLeaveRoom()
+                                        onBackClick()
+                                    }
+                                }
+                            )
+                        } else {
+                            PasswordGameContent(
+                                gameState = passwordGameState,
+                                settings = state.settings,
+                                players = state.players,
+                                currentUserId = state.currentUserId,
+                                onSubmitWord = onSubmitPasswordWord,
+                                onAwardPoints = onAwardPasswordPoints
                             )
                         }
                     }
@@ -207,6 +252,7 @@ fun GameRoomScreen(
                     RoomSettingsSection(
                         settings = state.settings,
                         isHost = state.isCurrentUserHost,
+                        gameId = state.gameInfo.id,
                         onSettingsChange = onSettingsChange
                     )
                     Spacer(modifier = Modifier.height(12.dp))
@@ -223,6 +269,7 @@ fun GameRoomScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // Players list
+                val showHostRole = state.gameInfo.id != "password"
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.weight(1f)
@@ -232,6 +279,7 @@ fun GameRoomScreen(
                             playerInfo = playerInfo,
                             isCurrentUserHost = state.isCurrentUserHost,
                             isCurrentUser = playerInfo.profile.id == state.currentUserId,
+                            showHostRole = showHostRole,
                             onTransferHost = { onTransferHost(playerInfo.profile.id) }
                         )
                     }
@@ -239,13 +287,19 @@ fun GameRoomScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                if (state.isCurrentUserHost && state.roomStatus == "waiting") {
+                val canStartReadyCheck = state.isCurrentUserHost || state.gameInfo.id == "password"
+                if (canStartReadyCheck && state.roomStatus == "waiting") {
+                    val isEnoughPlayers = state.players.size >= 3
                     Button(
                         onClick = onStartReadyCheck,
                         modifier = Modifier.fillMaxWidth().height(50.dp),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = isEnoughPlayers
                     ) {
-                        Text("Начать игру", fontWeight = FontWeight.Bold)
+                        Text(
+                            text = if (isEnoughPlayers) "Начать игру" else "Ожидание игроков (минимум 3)",
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                 }
@@ -266,11 +320,14 @@ fun GameRoomScreen(
                 // Leave room button
                 Button(
                     onClick = {
-                        if (state.isCurrentUserHost) {
-                            showLeaveDialog = true
-                        } else {
-                            onLeaveRoom()
-                            onBackClick()
+                        if (!isLeaving) {
+                            if (state.isCurrentUserHost) {
+                                showLeaveDialog = true
+                            } else {
+                                isLeaving = true
+                                onLeaveRoom()
+                                onBackClick()
+                            }
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -323,10 +380,13 @@ fun GameRoomScreen(
                 text = { Text("Вы являетесь ведущим. Если вы выйдете, комната будет удалена, а все игроки отключены.") },
                 confirmButton = {
                     TextButton(onClick = {
-                        showLeaveDialog = false
-                        onLeaveRoom()
-                        onBackClick()
-                    }) { Text("Выйти", color = MaterialTheme.colorScheme.error) }
+                        if (!isLeaving) {
+                            isLeaving = true
+                            showLeaveDialog = false
+                            onLeaveRoom()
+                            onBackClick()
+                        }
+                    }) { Text("Да, выйти", color = MaterialTheme.colorScheme.error) }
                 },
                 dismissButton = {
                     TextButton(onClick = { showLeaveDialog = false }) { Text("Отмена") }
@@ -338,7 +398,8 @@ fun GameRoomScreen(
             ReadyCheckDialog(
                 players = state.players,
                 currentUserId = state.currentUserId,
-                onToggleReady = onToggleReady
+                onToggleReady = onToggleReady,
+                onCancelReadyCheck = onCancelReadyCheck
             )
         }
 }
@@ -347,7 +408,8 @@ fun GameRoomScreen(
 fun ReadyCheckDialog(
     players: List<RoomPlayerInfo>,
     currentUserId: String,
-    onToggleReady: (Boolean) -> Unit
+    onToggleReady: (Boolean) -> Unit,
+    onCancelReadyCheck: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = { /* Cannot dismiss manually */ },
@@ -391,6 +453,13 @@ fun ReadyCheckDialog(
                 }
             }
         },
+        dismissButton = {
+            TextButton(
+                onClick = onCancelReadyCheck
+            ) {
+                Text("Отмена", color = MaterialTheme.colorScheme.error)
+            }
+        },
         properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
     )
 }
@@ -400,13 +469,14 @@ private fun RoomPlayerCard(
     playerInfo: RoomPlayerInfo,
     isCurrentUserHost: Boolean,
     isCurrentUser: Boolean,
+    showHostRole: Boolean = true,
     onTransferHost: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (playerInfo.isHost)
+            containerColor = if (showHostRole && playerInfo.isHost)
                 MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
             else
                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -442,7 +512,7 @@ private fun RoomPlayerCard(
                         )
                     }
                 }
-                if (playerInfo.isHost) {
+                if (showHostRole && playerInfo.isHost) {
                     Text(
                         text = "⭐ Ведущий",
                         style = MaterialTheme.typography.bodySmall,
@@ -452,25 +522,27 @@ private fun RoomPlayerCard(
                 }
             }
 
-            // Transfer host button - only shown to the current host, and not on themselves
-            if (isCurrentUserHost && !playerInfo.isHost) {
-                IconButton(
-                    onClick = onTransferHost,
-                    modifier = Modifier.size(36.dp)
-                ) {
+            if (showHostRole) {
+                // Transfer host button - only shown to the current host, and not on themselves
+                if (isCurrentUserHost && !playerInfo.isHost) {
+                    IconButton(
+                        onClick = onTransferHost,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            Icons.Outlined.StarOutline,
+                            contentDescription = "Передать роль ведущего",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else if (playerInfo.isHost) {
                     Icon(
-                        Icons.Outlined.StarOutline,
-                        contentDescription = "Передать роль ведущего",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        Icons.Filled.Star,
+                        contentDescription = "Ведущий",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
                     )
                 }
-            } else if (playerInfo.isHost) {
-                Icon(
-                    Icons.Filled.Star,
-                    contentDescription = "Ведущий",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
             }
         }
     }
@@ -480,6 +552,7 @@ private fun RoomPlayerCard(
 private fun RoomSettingsSection(
     settings: com.tbgames.app.core.domain.model.RoomSettings,
     isHost: Boolean,
+    gameId: String = "fake_artist",
     onSettingsChange: (com.tbgames.app.core.domain.model.RoomSettings) -> Unit
 ) {
     Card(
@@ -503,22 +576,24 @@ private fun RoomSettingsSection(
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     androidx.compose.material3.RadioButton(
-                        selected = settings.victoryType == "rounds",
+                        selected = settings.victoryType == "rounds" || gameId == "password",
                         onClick = { if (isHost) onSettingsChange(settings.copy(victoryType = "rounds", victoryValue = 1)) },
-                        enabled = isHost,
+                        enabled = isHost && gameId != "password", // disabled if password to just show it's locked to rounds
                         modifier = Modifier.size(24.dp)
                     )
                     Text(" Раунды", style = MaterialTheme.typography.bodySmall)
 
-                    Spacer(modifier = Modifier.width(12.dp))
+                    if (gameId != "password") {
+                        Spacer(modifier = Modifier.width(12.dp))
 
-                    androidx.compose.material3.RadioButton(
-                        selected = settings.victoryType == "points",
-                        onClick = { if (isHost) onSettingsChange(settings.copy(victoryType = "points", victoryValue = 1)) },
-                        enabled = isHost,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Text(" Очки", style = MaterialTheme.typography.bodySmall)
+                        androidx.compose.material3.RadioButton(
+                            selected = settings.victoryType == "points",
+                            onClick = { if (isHost) onSettingsChange(settings.copy(victoryType = "points", victoryValue = 1)) },
+                            enabled = isHost,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Text(" Очки", style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
 

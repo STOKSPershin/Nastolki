@@ -17,12 +17,12 @@ import com.tbgames.app.feature.gameroom.domain.model.FakeArtistGameState
 
 @Composable
 fun GameOverScreen(
-    gameState: FakeArtistGameState,
+    scores: Map<String, Int>,
     players: List<RoomPlayerInfo>,
     onExit: () -> Unit
 ) {
-    val maxScore = gameState.scores.values.maxOrNull() ?: 0
-    val winners = players.filter { gameState.scores[it.profile.id] == maxScore }
+    val maxScore = scores.values.maxOrNull() ?: 0
+    val winners = players.filter { scores[it.profile.id] == maxScore }
 
     val infiniteTransition = rememberInfiniteTransition()
     val scale by infiniteTransition.animateFloat(

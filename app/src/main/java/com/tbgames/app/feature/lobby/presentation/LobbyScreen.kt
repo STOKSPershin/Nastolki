@@ -229,6 +229,7 @@ private fun RoomCard(
     room: GameRoom,
     onJoinClick: () -> Unit
 ) {
+    val gameInfo = com.tbgames.app.core.domain.model.GameInfo.ALL_GAMES.find { it.id == room.gameType } ?: com.tbgames.app.core.domain.model.GameInfo.FAKE_ARTIST
     Card(
         modifier = Modifier.width(200.dp),
         shape = RoundedCornerShape(16.dp),
@@ -241,7 +242,7 @@ private fun RoomCard(
             modifier = Modifier.padding(16.dp)
         ) {
             Text(
-                text = "🎨",
+                text = gameInfo.emoji,
                 style = MaterialTheme.typography.headlineMedium
             )
             Spacer(modifier = Modifier.height(8.dp))
