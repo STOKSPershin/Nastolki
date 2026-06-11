@@ -465,7 +465,8 @@ class OnboardingViewModel @Inject constructor(
                 avatarType = finalAvatarType,
                 avatarPresetId = _uiState.value.selectedPresetId,
                 avatarUrl = avatarUrl,
-                deviceId = java.util.UUID.randomUUID().toString()
+                deviceId = java.util.UUID.randomUUID().toString(),
+                status = "in_lobby"
             )
 
             when (profileRepository.createProfile(profile)) {

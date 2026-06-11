@@ -121,9 +121,11 @@ fun TBGamesNavGraph(
             )
 
             // Navigate to lobby when profile is created
-            if (onboardingState.isProfileCreated) {
-                navController.navigate(Routes.LOBBY) {
-                    popUpTo(Routes.NICKNAME) { inclusive = true }
+            LaunchedEffect(onboardingState.isProfileCreated) {
+                if (onboardingState.isProfileCreated) {
+                    navController.navigate(Routes.LOBBY) {
+                        popUpTo(Routes.NICKNAME) { inclusive = true }
+                    }
                 }
             }
         }
@@ -162,7 +164,6 @@ fun TBGamesNavGraph(
                 },
                 onJoinRoom = { roomId ->
                     lobbyViewModel.joinRoom(roomId)
-                    navController.navigate(Routes.gameRoom(roomId))
                 },
                 onRefreshClick = lobbyViewModel::loadRooms,
                 onEnterLobby = lobbyViewModel::enterLobby

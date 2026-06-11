@@ -87,7 +87,10 @@ class GameRoomViewModel @Inject constructor(
                     // Heartbeat: update own updated_at so other clients see us as online
                     try {
                         supabase.postgrest["profiles"].update(
-                            mapOf("status" to "in_game")
+                            mapOf(
+                                "status" to "in_game",
+                                "updated_at" to java.time.Instant.now().toString()
+                            )
                         ) { filter { eq("id", userId) } }
                     } catch (_: Exception) {}
 
@@ -140,8 +143,9 @@ class GameRoomViewModel @Inject constructor(
                                         if (profile != null && rp.playerId != userId) {
                                              val updatedAt = parseSupabaseTime(profile.updatedAt)
                                              val isOffline = profile.status == "offline" || profile.status == null
-                                             val isInLobby = profile.status == "in_lobby"
-                                             if (isInLobby || (isOffline && updatedAt > 0L && (latestServerTime - updatedAt) > 60_000L)) {
+                                             // Do NOT remove players if they are "in_lobby". 
+                                             // They might be just transitioning from Lobby to Room and haven't sent 'in_game' heartbeat yet.
+                                             if (isOffline && updatedAt > 0L && (latestServerTime - updatedAt) > 60_000L) {
                                                  stalePlayerIds.add(rp.playerId)
                                              }
                                         }

@@ -44,7 +44,10 @@ class PresenceRepository @Inject constructor(
                 try {
                     try {
                         supabase.postgrest["profiles"].update(
-                            StatusUpdate(currentPlayer?.status ?: player.status)
+                            mapOf(
+                                "status" to (currentPlayer?.status ?: player.status),
+                                "updated_at" to java.time.Instant.now().toString()
+                            )
                         ) {
                             filter { eq("id", player.id) }
                         }

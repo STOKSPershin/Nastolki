@@ -69,6 +69,7 @@ class LobbyViewModel @Inject constructor(
 
     fun loadProfile() {
         viewModelScope.launch {
+            authRepository.awaitInitialization()
             val userId = authRepository.getCurrentUserId() ?: return@launch
             when (val result = profileRepository.getProfile(userId)) {
                 is AppResult.Success -> {
