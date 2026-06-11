@@ -73,7 +73,9 @@ fun GameRoomScreen(
     onRoundResult: (Int) -> Unit,
     onUpdateGameState: (com.tbgames.app.feature.gameroom.domain.model.FakeArtistGameState, String?) -> Unit,
     onSubmitPasswordWord: (String) -> Unit,
-    onAwardPasswordPoints: (Int) -> Unit
+    onAwardPasswordPoints: (Int) -> Unit,
+    onEndGameForAll: () -> Unit,
+    onDismissDisconnectDialog: () -> Unit
 ) {
     var showLeaveDialog by remember { mutableStateOf(false) }
     var isLeaving by remember { mutableStateOf(false) }
@@ -229,6 +231,31 @@ fun GameRoomScreen(
                                 onUpdateState = onUpdateGameState
                             )
                         }
+
+                        // Pause overlay
+                        if (state.isPaused && state.roomStatus == "playing") {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color.Black.copy(alpha = 0.6f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        text = "⏸ Игра на паузе",
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Ожидание игрока...",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = Color.White.copy(alpha = 0.8f)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             } else if ((state.roomStatus == "playing" || state.roomStatus == "game_over") && state.gameInfo.id == "password" && state.gameState != null) {
@@ -262,6 +289,31 @@ fun GameRoomScreen(
                                 onSubmitWord = onSubmitPasswordWord,
                                 onAwardPoints = onAwardPasswordPoints
                             )
+                        }
+
+                        // Pause overlay
+                        if (state.isPaused && state.roomStatus == "playing") {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color.Black.copy(alpha = 0.6f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        text = "⏸ Игра на паузе",
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Ожидание игрока...",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = Color.White.copy(alpha = 0.8f)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -426,6 +478,60 @@ fun GameRoomScreen(
                 currentUserId = state.currentUserId,
                 onToggleReady = onToggleReady,
                 onCancelReadyCheck = onCancelReadyCheck
+            )
+        }
+
+        // Player disconnected dialog
+        if (state.showDisconnectDialog) {
+            AlertDialog(
+                onDismissRequest = onDismissDisconnectDialog,
+                title = {
+                    Text(
+                        text = "⚠\uFE0F Игрок отключился",
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Column {
+                        Text(
+                            text = "Следующие игроки потеряли соединение:"
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        state.disconnectedPlayers.forEach { name ->
+                            Text(
+                                text = "• $name",
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Вы можете подождать их возвращения или завершить игру для всех."
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (!isLeaving) {
+                                isLeaving = true
+                                onEndGameForAll()
+                                onBackClick()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text("Завершить игру")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = onDismissDisconnectDialog) {
+                        Text("Подождать")
+                    }
+                },
+                properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true)
             )
         }
 }

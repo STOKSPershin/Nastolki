@@ -164,7 +164,8 @@ fun TBGamesNavGraph(
                     lobbyViewModel.joinRoom(roomId)
                     navController.navigate(Routes.gameRoom(roomId))
                 },
-                onRefreshClick = lobbyViewModel::loadRooms
+                onRefreshClick = lobbyViewModel::loadRooms,
+                onEnterLobby = lobbyViewModel::enterLobby
             )
         }
 
@@ -230,7 +231,9 @@ fun TBGamesNavGraph(
                 onRoundResult = gameRoomViewModel::handleRoundResult,
                 onUpdateGameState = gameRoomViewModel::updateGameState,
                 onSubmitPasswordWord = gameRoomViewModel::submitPasswordWord,
-                onAwardPasswordPoints = gameRoomViewModel::awardPasswordPoints
+                onAwardPasswordPoints = gameRoomViewModel::awardPasswordPoints,
+                onEndGameForAll = gameRoomViewModel::endGameForAll,
+                onDismissDisconnectDialog = gameRoomViewModel::dismissDisconnectDialog
             )
         }
     }

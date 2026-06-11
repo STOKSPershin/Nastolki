@@ -60,8 +60,13 @@ fun LobbyScreen(
     onHideGameSelectDialog: () -> Unit,
     onSelectGame: (GameInfo) -> Unit,
     onJoinRoom: (String) -> Unit,
-    onRefreshClick: () -> Unit
+    onRefreshClick: () -> Unit,
+    onEnterLobby: () -> Unit
 ) {
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        onEnterLobby()
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(

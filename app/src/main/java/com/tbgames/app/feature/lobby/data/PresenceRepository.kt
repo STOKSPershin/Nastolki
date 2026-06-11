@@ -44,7 +44,7 @@ class PresenceRepository @Inject constructor(
                 try {
                     try {
                         supabase.postgrest["profiles"].update(
-                            StatusUpdate(player.status)
+                            StatusUpdate(currentPlayer?.status ?: player.status)
                         ) {
                             filter { eq("id", player.id) }
                         }
@@ -65,7 +65,7 @@ class PresenceRepository @Inject constructor(
                         .filter { profile ->
                             val updatedAt = parseSupabaseTime(profile.updatedAt)
                             if (updatedAt > 0L) {
-                                (latestServerTime - updatedAt) <= 20000L
+                                (latestServerTime - updatedAt) <= 40000L
                             } else {
                                 false
                             }
@@ -77,7 +77,7 @@ class PresenceRepository @Inject constructor(
                                 avatarType = p.avatarType,
                                 avatarPresetId = p.avatarPresetId,
                                 avatarUrl = p.avatarUrl,
-                                status = if (p.id == player.id) player.status else (p.status ?: Constants.PlayerStatus.IN_LOBBY)
+                                status = if (p.id == player.id) (currentPlayer?.status ?: player.status) else (p.status ?: Constants.PlayerStatus.IN_LOBBY)
                             )
                         }
                     _onlinePlayers.value = players
@@ -87,7 +87,7 @@ class PresenceRepository @Inject constructor(
                     e.printStackTrace()
                     _hasInitialData.value = true // Stop showing loading even on error
                 }
-                delay(5000)
+                delay(8000)
             }
         }
     }
@@ -137,6 +137,22 @@ class PresenceRepository @Inject constructor(
             }
             if (!clean.contains("Z") && !clean.contains("+") && clean.lastIndexOf("-") < 10) {
                 clean += "Z"
+            }
+            if (clean.contains(".")) {
+                val dotIndex = clean.indexOf(".")
+                var suffix = ""
+                if (clean.endsWith("Z")) {
+                    suffix = "Z"
+                } else {
+                    val plusIndex = clean.indexOf("+", dotIndex)
+                    val minusIndex = clean.indexOf("-", dotIndex)
+                    if (plusIndex > 0) {
+                        suffix = clean.substring(plusIndex)
+                    } else if (minusIndex > 0) {
+                        suffix = clean.substring(minusIndex)
+                    }
+                }
+                clean = clean.substring(0, dotIndex) + suffix
             }
             return java.time.Instant.parse(clean).toEpochMilli()
         } catch (e: Exception) {

@@ -44,7 +44,10 @@ data class GameRoomUiState(
     val settings: com.tbgames.app.core.domain.model.RoomSettings = com.tbgames.app.core.domain.model.RoomSettings(),
     val roomStatus: String = "waiting",
     val gameState: kotlinx.serialization.json.JsonElement? = null,
-    val error: String? = null
+    val error: String? = null,
+    val disconnectedPlayers: List<String> = emptyList(), // nicknames of disconnected players
+    val isPaused: Boolean = false,
+    val showDisconnectDialog: Boolean = false
 )
 
 @kotlinx.serialization.Serializable
@@ -81,6 +84,13 @@ class GameRoomViewModel @Inject constructor(
         pollingJob = CoroutineScope(Dispatchers.IO).launch {
             while (isActive) {
                 try {
+                    // Heartbeat: update own updated_at so other clients see us as online
+                    try {
+                        supabase.postgrest["profiles"].update(
+                            mapOf("status" to "in_game")
+                        ) { filter { eq("id", userId) } }
+                    } catch (_: Exception) {}
+
                     // Load room info
                     val rooms = supabase.postgrest["rooms"].select {
                         filter { eq("id", roomId) }
@@ -112,29 +122,98 @@ class GameRoomViewModel @Inject constructor(
                                 filter { isIn("id", playerIds) }
                             }.decodeList<PlayerProfile>()
 
-                            // Detect if any players in room_players have no profiles in profiles table (stale entries)
+                            // Compute latest server time from all profiles' updated_at
+                            val latestServerTime = profiles.mapNotNull { p ->
+                                parseSupabaseTime(p.updatedAt).takeIf { it > 0L }
+                            }.maxOrNull() ?: System.currentTimeMillis()
+
+                            // Detect if any players in room_players have no profiles (stale entries)
                             val existingProfileIds = profiles.map { it.id }.toSet()
-                            roomPlayers.forEach { rp ->
-                                if (rp.playerId !in existingProfileIds) {
-                                    CoroutineScope(Dispatchers.IO).launch {
-                                        try {
-                                            supabase.postgrest["room_players"].delete {
-                                                filter {
-                                                    eq("room_id", roomId)
-                                                    eq("player_id", rp.playerId)
-                                                }
-                                            }
-                                            // Update current_players count in rooms table
-                                            val remainingCount = roomPlayers.size - 1
-                                            supabase.postgrest["rooms"].update(
-                                                mapOf("current_players" to remainingCount)
-                                            ) { filter { eq("id", roomId) } }
-                                        } catch (e: Exception) {}
+                            val stalePlayerIds = mutableListOf<String>()
+                            if (room.status == "waiting") {
+                                roomPlayers.forEach { rp ->
+                                    if (rp.playerId !in existingProfileIds) {
+                                        stalePlayerIds.add(rp.playerId)
+                                    } else {
+                                        // Also remove players who are offline for >60 seconds
+                                        val profile = profiles.find { it.id == rp.playerId }
+                                        if (profile != null && rp.playerId != userId) {
+                                             val updatedAt = parseSupabaseTime(profile.updatedAt)
+                                             val isOffline = profile.status == "offline" || profile.status == null
+                                             val isInLobby = profile.status == "in_lobby"
+                                             if (isInLobby || (isOffline && updatedAt > 0L && (latestServerTime - updatedAt) > 60_000L)) {
+                                                 stalePlayerIds.add(rp.playerId)
+                                             }
+                                        }
                                     }
                                 }
                             }
 
+                            // Clean up stale players
+                            if (stalePlayerIds.isNotEmpty() && room.status == "waiting") {
+                                stalePlayerIds.forEach { staleId ->
+                                    try {
+                                        supabase.postgrest["room_players"].delete {
+                                            filter {
+                                                eq("room_id", roomId)
+                                                eq("player_id", staleId)
+                                            }
+                                        }
+                                    } catch (_: Exception) {}
+                                }
+                                val remainingCount = roomPlayers.size - stalePlayerIds.size
+                                if (remainingCount <= 0) {
+                                    try {
+                                        supabase.postgrest["rooms"].delete { filter { eq("id", roomId) } }
+                                    } catch (_: Exception) {}
+                                    _uiState.update { it.copy(isRoomClosed = true, isLoading = false) }
+                                    return@launch
+                                } else {
+                                    try {
+                                        supabase.postgrest["rooms"].update(
+                                            mapOf("current_players" to remainingCount)
+                                        ) { filter { eq("id", roomId) } }
+                                    } catch (_: Exception) {}
+                                }
+                            }
+
+                            // Detect disconnected players during active game
+                            val disconnectedNames = mutableListOf<String>()
+                            if (room.status == "playing") {
+                                 profiles.forEach { profile ->
+                                     if (profile.id != userId) {
+                                         val updatedAt = parseSupabaseTime(profile.updatedAt)
+                                         val isOffline = profile.status == "offline" || profile.status == null || profile.status == "in_lobby"
+                                         val isStale = updatedAt > 0L && (latestServerTime - updatedAt) > 20_000L
+                                         if (isOffline || isStale) {
+                                             disconnectedNames.add(profile.nickname)
+                                         }
+                                     }
+                                 }
+                            }
+
+                            val wasAlreadyPaused = _uiState.value.isPaused
+                            if (disconnectedNames.isNotEmpty()) {
+                                _uiState.update {
+                                    it.copy(
+                                        isPaused = true,
+                                        disconnectedPlayers = disconnectedNames,
+                                        showDisconnectDialog = if (!wasAlreadyPaused) true else it.showDisconnectDialog
+                                    )
+                                }
+                            } else {
+                                // All players are back online — unpause
+                                _uiState.update {
+                                    it.copy(
+                                        isPaused = false,
+                                        disconnectedPlayers = emptyList(),
+                                        showDisconnectDialog = false
+                                    )
+                                }
+                            }
+
                             roomPlayers.mapNotNull { rp ->
+                                if (rp.playerId in stalePlayerIds) return@mapNotNull null
                                 profiles.find { it.id == rp.playerId }?.let { profile ->
                                     RoomPlayerInfo(profile = profile, isHost = rp.isHost, isReady = rp.isReady)
                                 }
@@ -150,7 +229,7 @@ class GameRoomViewModel @Inject constructor(
                         if (room.status == "waiting") {
                             try {
                                 supabase.postgrest["rooms"].delete { filter { eq("id", roomId) } }
-                            } catch (e: Exception) {}
+                            } catch (_: Exception) {}
                         } else {
                             val newHostId = playerInfos.minByOrNull { it.profile.id }?.profile?.id
                             if (newHostId == userId) {
@@ -172,7 +251,7 @@ class GameRoomViewModel @Inject constructor(
                     e.printStackTrace()
                     _uiState.update { it.copy(isLoading = false) }
                 }
-                delay(3000)
+                delay(5000)
             }
         }
     }
@@ -614,9 +693,70 @@ class GameRoomViewModel @Inject constructor(
         }
     }
 
+    fun endGameForAll() {
+        val roomId = _uiState.value.roomId
+        viewModelScope.launch {
+            try {
+                supabase.postgrest["rooms"].delete {
+                    filter { eq("id", roomId) }
+                }
+            } catch (_: Exception) {}
+            _uiState.update { it.copy(isRoomClosed = true) }
+        }
+    }
+
+    fun dismissDisconnectDialog() {
+        _uiState.update { it.copy(showDisconnectDialog = false) }
+    }
+
+    private fun parseSupabaseTime(timeString: String?): Long {
+        if (timeString == null) return 0L
+        try {
+            var clean = timeString.replace(" ", "T")
+            if (clean.endsWith("+00")) {
+                clean = clean.substringBeforeLast("+00") + "Z"
+            } else if (clean.endsWith("+00:00")) {
+                clean = clean.substringBeforeLast("+00:00") + "Z"
+            }
+            if (!clean.contains("Z") && !clean.contains("+") && clean.lastIndexOf("-") < 10) {
+                clean += "Z"
+            }
+            if (clean.contains(".")) {
+                val dotIndex = clean.indexOf(".")
+                var suffix = ""
+                if (clean.endsWith("Z")) {
+                    suffix = "Z"
+                } else {
+                    val plusIndex = clean.indexOf("+", dotIndex)
+                    val minusIndex = clean.indexOf("-", dotIndex)
+                    if (plusIndex > 0) {
+                        suffix = clean.substring(plusIndex)
+                    } else if (minusIndex > 0) {
+                        suffix = clean.substring(minusIndex)
+                    }
+                }
+                clean = clean.substring(0, dotIndex) + suffix
+            }
+            return java.time.Instant.parse(clean).toEpochMilli()
+        } catch (_: Exception) {
+            return 0L
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         pollingJob?.cancel()
+        // Set status back when leaving game room
+        val userId = authRepository.getCurrentUserId()
+        if (userId != null) {
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    supabase.postgrest["profiles"].update(
+                        mapOf("status" to "in_lobby")
+                    ) { filter { eq("id", userId) } }
+                } catch (_: Exception) {}
+            }
+        }
     }
 
 }

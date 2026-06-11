@@ -66,45 +66,106 @@ class OnboardingViewModel @Inject constructor(
         checkLoginStatus()
     }
 
+    private fun isNetworkException(message: String?): Boolean {
+        if (message == null) return false
+        val msg = message.lowercase()
+        return msg.contains("network") ||
+               msg.contains("timeout") ||
+               msg.contains("connect") ||
+               msg.contains("resolve") ||
+               msg.contains("dns") ||
+               msg.contains("route") ||
+               msg.contains("socket") ||
+               msg.contains("offline") ||
+               msg.contains("unreachable")
+    }
+
     private fun checkLoginStatus() {
         viewModelScope.launch {
-            // Step 1: Check if Supabase session is alive and profile exists
+            _uiState.update { it.copy(isLoading = true) }
+            authRepository.awaitInitialization()
+
+            val localProfile = localProfileStorage.getProfile()
+            val activeAccountId = localAccountStorage.getActiveAccountId() ?: localProfile?.id
+
+            // Check if Supabase already has a valid session for the active account
             var loggedIn = authRepository.isLoggedIn()
-            
-            // If not logged in, but we have an active account, try to restore it implicitly!
-            if (!loggedIn) {
-                val activeAccountId = localAccountStorage.getActiveAccountId()
-                if (activeAccountId != null) {
-                    val savedAccounts = localAccountStorage.getSavedAccounts()
-                    val activeAccount = savedAccounts.find { it.userId == activeAccountId }
-                    if (activeAccount != null) {
-                        val restoreResult = authRepository.restoreSession(activeAccount.accessToken, activeAccount.refreshToken)
-                        if (restoreResult is AppResult.Success) {
-                            loggedIn = true
+            val currentUserId = authRepository.getCurrentUserId()
+
+            if (loggedIn && currentUserId != null && activeAccountId != null && currentUserId == activeAccountId) {
+                // Already authenticated on the correct account, just load/refresh profile
+                when (val result = profileRepository.getProfile(currentUserId)) {
+                    is AppResult.Success -> {
+                        localProfileStorage.saveProfile(result.data)
+                        localAccountStorage.setActiveAccountId(currentUserId)
+                        _uiState.update { it.copy(isLoggedIn = true, isLoading = false) }
+                        return@launch
+                    }
+                    is AppResult.Error -> {
+                        if (isNetworkException(result.message)) {
+                            // If network fails but we had a cached profile for this user, use it
+                            if (localProfile != null && localProfile.id == currentUserId) {
+                                _uiState.update { it.copy(isLoggedIn = true, isLoading = false) }
+                                return@launch
+                            }
                         }
                     }
                 }
             }
 
+            // If not logged in or logged in to a different account, try to restore the active account's session manually
+            if (activeAccountId != null) {
+                val savedAccounts = localAccountStorage.getSavedAccounts()
+                val activeAccount = savedAccounts.find { it.userId == activeAccountId }
+                if (activeAccount != null) {
+                    val restoreResult = authRepository.restoreSession(activeAccount.accessToken, activeAccount.refreshToken)
+                    if (restoreResult is AppResult.Success) {
+                        when (val result = profileRepository.getProfile(activeAccountId)) {
+                            is AppResult.Success -> {
+                                localProfileStorage.saveProfile(result.data)
+                                localAccountStorage.setActiveAccountId(activeAccountId)
+                                _uiState.update { it.copy(isLoggedIn = true, isLoading = false) }
+                                return@launch
+                            }
+                            is AppResult.Error -> {
+                                if (isNetworkException(result.message)) {
+                                    _uiState.update { it.copy(isLoggedIn = true, isLoading = false) }
+                                    return@launch
+                                }
+                            }
+                        }
+                    } else {
+                        val errorMsg = (restoreResult as? AppResult.Error)?.message
+                        if (isNetworkException(errorMsg)) {
+                            _uiState.update { it.copy(isLoggedIn = true, isLoading = false) }
+                            return@launch
+                        }
+                    }
+                }
+            }
+
+            // If restore failed or no active account, check if we're still logged in to ANY account
+            loggedIn = authRepository.isLoggedIn()
             if (loggedIn) {
                 val userId = authRepository.getCurrentUserId()
                 if (userId != null) {
                     when (val result = profileRepository.getProfile(userId)) {
                         is AppResult.Success -> {
-                            // Session valid, profile exists -> save locally and go
                             localProfileStorage.saveProfile(result.data)
                             localAccountStorage.setActiveAccountId(userId)
                             _uiState.update { it.copy(isLoggedIn = true, isLoading = false) }
                             return@launch
                         }
                         is AppResult.Error -> {
-                            // Session exists but profile gone -> fall through
+                            if (isNetworkException(result.message) && localProfile != null && localProfile.id == userId) {
+                                _uiState.update { it.copy(isLoggedIn = true, isLoading = false) }
+                                return@launch
+                            }
                         }
                     }
                 }
             }
 
-            // Step 2: Session invalid or profile missing. Check for saved accounts.
             val savedAccounts = localAccountStorage.getSavedAccounts()
             if (savedAccounts.isNotEmpty()) {
                 _uiState.update { 
@@ -169,7 +230,6 @@ class OnboardingViewModel @Inject constructor(
 
             // Step 3.5: No server profile found by deviceId, but we might still have a local profile in local storage.
             // Let's try to recover it as a last resort.
-            val localProfile = localProfileStorage.getProfile()
             if (localProfile != null) {
                 when (val authResult = authRepository.signInAnonymously()) {
                     is AppResult.Success -> {
@@ -230,10 +290,9 @@ class OnboardingViewModel @Inject constructor(
 
     fun restoreAccount(account: SavedAccount) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
+            _uiState.update { it.copy(isLoading = true, error = null) }
             val restoreResult = authRepository.restoreSession(account.accessToken, account.refreshToken)
             if (restoreResult is AppResult.Success) {
-                // Fetch profile to make sure it exists
                 when (val profileResult = profileRepository.getProfile(account.userId)) {
                     is AppResult.Success -> {
                         localAccountStorage.setActiveAccountId(account.userId)
@@ -241,17 +300,81 @@ class OnboardingViewModel @Inject constructor(
                         _uiState.update { it.copy(isLoading = false, isLoggedIn = true) }
                     }
                     is AppResult.Error -> {
-                        _uiState.update { it.copy(isLoading = false, error = "Профиль не найден") }
+                        if (isNetworkException(profileResult.message)) {
+                            localAccountStorage.setActiveAccountId(account.userId)
+                            val tempProfile = PlayerProfile(
+                                id = account.userId,
+                                nickname = account.nickname,
+                                avatarType = account.avatarType,
+                                avatarPresetId = account.avatarPresetId,
+                                avatarUrl = account.avatarUrl
+                            )
+                            localProfileStorage.saveProfile(tempProfile)
+                            _uiState.update { it.copy(isLoading = false, isLoggedIn = true) }
+                        } else {
+                            _uiState.update { it.copy(isLoading = false, error = "Профиль не найден на сервере") }
+                        }
                     }
                 }
             } else {
-                _uiState.update { it.copy(isLoading = false, error = "Не удалось восстановить сессию") }
+                val errorMsg = (restoreResult as? AppResult.Error)?.message
+                if (isNetworkException(errorMsg)) {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            error = "Проблема с сетью. Проверьте интернет-соединение и попробуйте снова."
+                        )
+                    }
+                } else {
+                    when (val authResult = authRepository.signInAnonymously()) {
+                        is AppResult.Success -> {
+                            when (val profileResult = profileRepository.getProfile(account.userId)) {
+                                is AppResult.Success -> {
+                                    _uiState.update {
+                                        it.copy(
+                                            isLoading = false,
+                                            error = "Сессия устарела. Попробуйте удалить аккаунт и создать новый."
+                                        )
+                                    }
+                                    authRepository.signOut()
+                                }
+                                is AppResult.Error -> {
+                                    val profileErr = profileResult.message
+                                    if (isNetworkException(profileErr)) {
+                                        _uiState.update {
+                                            it.copy(
+                                                isLoading = false,
+                                                error = "Проблема с сетью. Проверьте интернет-соединение и попробуйте снова."
+                                            )
+                                        }
+                                    } else {
+                                        _uiState.update {
+                                            it.copy(
+                                                isLoading = false,
+                                                error = "Проблема с сетью. Проверьте интернет-соединение и попробуйте снова."
+                                            )
+                                        }
+                                    }
+                                    authRepository.signOut()
+                                }
+                            }
+                        }
+                        is AppResult.Error -> {
+                            _uiState.update {
+                                it.copy(
+                                    isLoading = false,
+                                    error = "Проблема с сетью. Проверьте интернет-соединение и попробуйте снова."
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 
     fun startNewAccountCreation() {
-        _uiState.update { it.copy(hasSavedAccounts = false, isLoading = false) }
+        _uiState.update { it.copy(hasSavedAccounts = false, isLoading = false, error = null) }
     }
 
     fun onNicknameChange(value: String) {
